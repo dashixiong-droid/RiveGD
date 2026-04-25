@@ -69,7 +69,7 @@ void initialize_rive_renderer() {
     }
 
     if (success) {
-        UtilityFunctions::print("Rive renderer initialized successfully.");
+        UtilityFunctions::print_verbose("Rive renderer initialized.");
     } else {
         UtilityFunctions::printerr("Rive renderer initialization failed.");
     }

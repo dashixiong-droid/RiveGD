@@ -71,12 +71,10 @@ public:
     rive::Core* hitTest(rive::HitInfo*, const rive::Mat2D&) override { return nullptr; }
 
     rive::StatusCode onAddedDirty(rive::CoreContext* context) override {
-        // godot::UtilityFunctions::print("RiveSVGDrawable::onAddedDirty");
         return rive::Drawable::onAddedDirty(context);
     }
 
     rive::StatusCode onAddedClean(rive::CoreContext* context) override {
-        // godot::UtilityFunctions::print("RiveSVGDrawable::onAddedClean");
         return rive::Drawable::onAddedClean(context);
     }
 };
@@ -159,7 +157,7 @@ void RiveSVG::parse(String xml_content) {
         } else if ((shape->fill.type == NSVG_PAINT_LINEAR_GRADIENT || shape->fill.type == NSVG_PAINT_RADIAL_GRADIENT) && shape->fill.gradient && shape->fill.gradient->nstops > 0) {
             has_fill = true;
             fill_color = shape->fill.gradient->stops[0].color;
-            UtilityFunctions::print("RiveSVG: Gradient fill detected, falling back to first stop color.");
+            UtilityFunctions::print_verbose("RiveSVG: Gradient fill detected, falling back to first stop color.");
         }
 
         if (has_fill) {
@@ -191,7 +189,7 @@ void RiveSVG::parse(String xml_content) {
         } else if ((shape->stroke.type == NSVG_PAINT_LINEAR_GRADIENT || shape->stroke.type == NSVG_PAINT_RADIAL_GRADIENT) && shape->stroke.gradient && shape->stroke.gradient->nstops > 0) {
             has_stroke = true;
             stroke_color = shape->stroke.gradient->stops[0].color;
-            UtilityFunctions::print("RiveSVG: Gradient stroke detected, falling back to first stop color.");
+            UtilityFunctions::print_verbose("RiveSVG: Gradient stroke detected, falling back to first stop color.");
         }
 
         if (has_stroke) {

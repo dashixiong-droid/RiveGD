@@ -63,7 +63,7 @@ bool create_opengl_context() {
     }
 
     RiveRenderRegistry::get_singleton()->set_factory(g_rive_context);
-    UtilityFunctions::print("Rive: OpenGL context initialized.");
+    UtilityFunctions::print_verbose("Rive: OpenGL context initialized.");
     return true;
 }
 
