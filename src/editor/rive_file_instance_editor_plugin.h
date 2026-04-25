@@ -35,7 +35,7 @@ class RiveFileInstanceEditorPlugin : public EditorPlugin {
     int hovering_handle = -1;
 
     // Drag state (captured when drag begins)
-    Vector2 drag_anchor_parent; // anchor point in parent space, fixed during drag
+    Vector2 drag_anchor_parent;
     Vector2 drag_start_scale;
     Vector2 drag_start_pos;
     Rect2 drag_start_rect;
@@ -51,12 +51,12 @@ protected:
     static void _bind_methods();
 
 public:
-    RiveFileInstanceEditorPlugin();
-
     virtual String _get_plugin_name() const override { return "RiveFileInstance"; }
     virtual bool _handles(Object *p_object) const override;
     virtual void _make_visible(bool p_visible) override;
     virtual void _edit(Object *p_object) override;
+    virtual void _enter_tree() override;
+    virtual void _exit_tree() override;
 
     virtual bool _forward_canvas_gui_input(const Ref<InputEvent> &p_event) override;
     virtual void _forward_canvas_draw_over_viewport(Control *p_overlay) override;

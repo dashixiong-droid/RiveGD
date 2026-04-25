@@ -41,11 +41,22 @@ void RiveFileInstanceEditor::edit(RiveFileInstance *p_node) {
 
 void RiveFileInstanceEditorPlugin::_bind_methods() {}
 
-RiveFileInstanceEditorPlugin::RiveFileInstanceEditorPlugin() {
+void RiveFileInstanceEditorPlugin::_enter_tree() {
     rive_editor = memnew(RiveFileInstanceEditor);
     EditorInterface::get_singleton()->get_base_control()->add_child(rive_editor);
     add_control_to_container(CONTAINER_CANVAS_EDITOR_MENU, rive_editor->get_top_hb());
     rive_editor->get_top_hb()->hide();
+}
+
+void RiveFileInstanceEditorPlugin::_exit_tree() {
+    if (rive_editor) {
+        remove_control_from_container(CONTAINER_CANVAS_EDITOR_MENU, rive_editor->get_top_hb());
+        if (rive_editor->get_parent()) {
+            rive_editor->get_parent()->remove_child(rive_editor);
+        }
+        memdelete(rive_editor);
+        rive_editor = nullptr;
+    }
 }
 
 bool RiveFileInstanceEditorPlugin::_handles(Object *p_object) const {
