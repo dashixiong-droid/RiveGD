@@ -11,6 +11,7 @@ class RiveRaw : public RiveNode {
 
 private:
     Ref<RiveRendererWrapper> renderer_wrapper;
+    Rect2 bounds = Rect2(0, 0, 0, 0);
 
 protected:
     static void _bind_methods();
@@ -18,6 +19,11 @@ protected:
 public:
     RiveRaw();
     ~RiveRaw();
+
+    void set_bounds(const Rect2 &p_bounds);
+    Rect2 get_bounds() const { return bounds; }
+
+    Rect2 get_rive_bounds() const override { return bounds; }
 
     void draw(rive::Renderer* renderer) override;
 };

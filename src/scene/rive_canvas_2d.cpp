@@ -114,8 +114,11 @@ void RiveCanvas2D::draw(rive::Renderer *renderer) {
             Rect2 node_bounds = node->get_rive_bounds();
             Transform2D node_xform = node->get_transform();
             Rect2 transformed_bounds = node_xform.xform(node_bounds);
-            
-            if (canvas_rect.intersects(transformed_bounds)) {
+
+            // Empty bounds means "no known size" (e.g. RiveRaw with custom drawing)
+            // — skip culling and always draw.
+            bool always_draw = node_bounds.size.x <= 0 || node_bounds.size.y <= 0;
+            if (always_draw || canvas_rect.intersects(transformed_bounds)) {
                 renderer->save();
                 node->draw(renderer);
                 renderer->restore();

@@ -30,6 +30,8 @@ void initialize_rive_module(ModuleInitializationLevel p_level) {
         ClassDB::register_class<RiveControl>();
         ClassDB::register_class<RivePath>();
         ClassDB::register_class<RivePaint>();
+        ClassDB::register_class<RiveGradient>();
+        ClassDB::register_class<RiveImage>();
         ClassDB::register_class<RiveRendererWrapper>();
         ClassDB::register_class<RiveSVG>();
         

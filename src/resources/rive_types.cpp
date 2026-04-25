@@ -1,8 +1,12 @@
 #include "rive_types.h"
 #include "rive/math/raw_path.hpp"
+#include "rive/math/aabb.hpp"
+#include "rive/shapes/paint/image_sampler.hpp"
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
+#include <godot_cpp/classes/image.hpp>
 #include <cmath>
+#include <vector>
 
 using namespace godot;
 
@@ -17,9 +21,14 @@ RivePath::~RivePath() {}
 void RivePath::_bind_methods() {
     ClassDB::bind_method(D_METHOD("move_to", "x", "y"), &RivePath::move_to);
     ClassDB::bind_method(D_METHOD("line_to", "x", "y"), &RivePath::line_to);
+    ClassDB::bind_method(D_METHOD("quad_to", "cx", "cy", "x", "y"), &RivePath::quad_to);
     ClassDB::bind_method(D_METHOD("cubic_to", "ox", "oy", "ix", "iy", "x", "y"), &RivePath::cubic_to);
     ClassDB::bind_method(D_METHOD("close"), &RivePath::close);
     ClassDB::bind_method(D_METHOD("reset"), &RivePath::reset);
+    ClassDB::bind_method(D_METHOD("add_rect", "x", "y", "w", "h"), &RivePath::add_rect);
+    ClassDB::bind_method(D_METHOD("add_oval", "x", "y", "w", "h"), &RivePath::add_oval);
+    ClassDB::bind_method(D_METHOD("add_circle", "cx", "cy", "radius"), &RivePath::add_circle);
+    ClassDB::bind_method(D_METHOD("add_path", "other"), &RivePath::add_path);
     ClassDB::bind_method(D_METHOD("set_fill_rule", "rule"), &RivePath::set_fill_rule);
     ClassDB::bind_method(D_METHOD("parse_svg", "path_data"), &RivePath::parse_svg);
 }
@@ -31,6 +40,11 @@ void RivePath::move_to(float x, float y) {
 
 void RivePath::line_to(float x, float y) {
     raw_path->lineTo(x, y);
+    is_dirty = true;
+}
+
+void RivePath::quad_to(float cx, float cy, float x, float y) {
+    raw_path->quadTo(cx, cy, x, y);
     is_dirty = true;
 }
 
@@ -46,6 +60,49 @@ void RivePath::close() {
 
 void RivePath::reset() {
     raw_path->reset();
+    is_dirty = true;
+}
+
+void RivePath::add_rect(float x, float y, float w, float h) {
+    raw_path->addRect(rive::AABB(x, y, x + w, y + h));
+    is_dirty = true;
+}
+
+void RivePath::add_oval(float x, float y, float w, float h) {
+    raw_path->addOval(rive::AABB(x, y, x + w, y + h));
+    is_dirty = true;
+}
+
+void RivePath::add_circle(float cx, float cy, float radius) {
+    raw_path->addOval(rive::AABB(cx - radius, cy - radius, cx + radius, cy + radius));
+    is_dirty = true;
+}
+
+void RivePath::add_path(Ref<RivePath> other) {
+    if (other.is_null() || other.ptr() == this) return;
+    const rive::RawPath* src = other->raw_path.get();
+    if (!src) return;
+    for (auto iter = src->begin(); iter != src->end(); ++iter) {
+        rive::PathVerb verb = iter.verb();
+        const rive::Vec2D* p = iter.pts();
+        switch (verb) {
+            case rive::PathVerb::move:
+                raw_path->moveTo(p[0].x, p[0].y);
+                break;
+            case rive::PathVerb::line:
+                raw_path->lineTo(p[1].x, p[1].y);
+                break;
+            case rive::PathVerb::quad:
+                raw_path->quadTo(p[1].x, p[1].y, p[2].x, p[2].y);
+                break;
+            case rive::PathVerb::cubic:
+                raw_path->cubicTo(p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
+                break;
+            case rive::PathVerb::close:
+                raw_path->close();
+                break;
+        }
+    }
     is_dirty = true;
 }
 
@@ -84,51 +141,125 @@ static float read_float(const String& d, int& i) {
 }
 
 static void svg_arc_to(RivePath* path, float rx, float ry, float angle, bool large_arc_flag, bool sweep_flag, float x, float y, float cur_x, float cur_y) {
+    // Endpoint-to-center conversion per SVG 1.1 Appendix F.6.5,
+    // then split the resulting elliptical arc into <= 90deg segments,
+    // each approximated by a cubic Bezier.
+    if (cur_x == x && cur_y == y) return;
     if (rx == 0 || ry == 0) {
         path->line_to(x, y);
         return;
     }
-    
+
     rx = std::abs(rx);
     ry = std::abs(ry);
-    
+
     float angle_rad = Math::deg_to_rad(angle);
     float cos_phi = std::cos(angle_rad);
     float sin_phi = std::sin(angle_rad);
-    
-    float dx = (cur_x - x) / 2.0f;
-    float dy = (cur_y - y) / 2.0f;
-    
-    float x1 = cos_phi * dx + sin_phi * dy;
-    float y1 = -sin_phi * dx + cos_phi * dy;
-    
+
+    float dx = (cur_x - x) * 0.5f;
+    float dy = (cur_y - y) * 0.5f;
+
+    // (x1', y1') — coordinates in the rotated frame.
+    float x1p = cos_phi * dx + sin_phi * dy;
+    float y1p = -sin_phi * dx + cos_phi * dy;
+
     float rx_sq = rx * rx;
     float ry_sq = ry * ry;
-    float x1_sq = x1 * x1;
-    float y1_sq = y1 * y1;
-    
-    float check = x1_sq / rx_sq + y1_sq / ry_sq;
-    if (check > 1) {
-        rx *= std::sqrt(check);
-        ry *= std::sqrt(check);
+    float x1p_sq = x1p * x1p;
+    float y1p_sq = y1p * y1p;
+
+    // Scale up radii if they are too small to fit the chord.
+    float lambda = x1p_sq / rx_sq + y1p_sq / ry_sq;
+    if (lambda > 1.0f) {
+        float s = std::sqrt(lambda);
+        rx *= s;
+        ry *= s;
         rx_sq = rx * rx;
         ry_sq = ry * ry;
     }
-    
-    float sign = (large_arc_flag == sweep_flag) ? -1 : 1;
-    float sq = ((rx_sq * ry_sq) - (rx_sq * y1_sq) - (ry_sq * x1_sq)) / ((rx_sq * y1_sq) + (ry_sq * x1_sq));
-    sq = (sq < 0) ? 0 : sq;
-    float coef = sign * std::sqrt(sq);
-    
-    float cx1 = coef * ((rx * y1) / ry);
-    float cy1 = coef * -((ry * x1) / rx);
-    
-    float cx = cur_x + (x - cur_x) / 2.0f + (cos_phi * cx1 - sin_phi * cy1);
-    float cy = cur_y + (y - cur_y) / 2.0f + (sin_phi * cx1 + cos_phi * cy1);
-    
-    // TODO: Calculate start/end angles and draw arc using cubicTo approximation
-    // For now, just line to end point as fallback
-    path->line_to(x, y);
+
+    float sign = (large_arc_flag == sweep_flag) ? -1.0f : 1.0f;
+    float numer = rx_sq * ry_sq - rx_sq * y1p_sq - ry_sq * x1p_sq;
+    float denom = rx_sq * y1p_sq + ry_sq * x1p_sq;
+    float coef = sign * std::sqrt(std::max(0.0f, numer / denom));
+
+    float cxp = coef * (rx * y1p) / ry;
+    float cyp = coef * -(ry * x1p) / rx;
+
+    // Center in user space.
+    float cx = cos_phi * cxp - sin_phi * cyp + (cur_x + x) * 0.5f;
+    float cy = sin_phi * cxp + cos_phi * cyp + (cur_y + y) * 0.5f;
+
+    // Start angle and sweep.
+    auto angle_between = [](float ux, float uy, float vx, float vy) {
+        float dot = ux * vx + uy * vy;
+        float len = std::sqrt((ux * ux + uy * uy) * (vx * vx + vy * vy));
+        if (len == 0.0f) return 0.0f;
+        float c = dot / len;
+        if (c < -1.0f) c = -1.0f;
+        if (c > 1.0f) c = 1.0f;
+        float a = std::acos(c);
+        if ((ux * vy - uy * vx) < 0.0f) a = -a;
+        return a;
+    };
+
+    float ux = (x1p - cxp) / rx;
+    float uy = (y1p - cyp) / ry;
+    float vx = (-x1p - cxp) / rx;
+    float vy = (-y1p - cyp) / ry;
+
+    float theta1 = angle_between(1.0f, 0.0f, ux, uy);
+    float delta = angle_between(ux, uy, vx, vy);
+    if (!sweep_flag && delta > 0.0f) delta -= (float)Math_TAU;
+    else if (sweep_flag && delta < 0.0f) delta += (float)Math_TAU;
+
+    // Number of cubic segments (each spans <= 90deg).
+    int segments = (int)std::ceil(std::abs(delta) / ((float)Math_PI * 0.5f));
+    if (segments < 1) segments = 1;
+    float seg_delta = delta / (float)segments;
+    // Bezier control point handle length for a unit-circle arc segment.
+    float t = (4.0f / 3.0f) * std::tan(seg_delta * 0.25f);
+
+    float a = theta1;
+    float prev_cos = std::cos(a);
+    float prev_sin = std::sin(a);
+    for (int s = 0; s < segments; s++) {
+        float a1 = a + seg_delta;
+        float c1 = std::cos(a1);
+        float s1 = std::sin(a1);
+
+        // Points on the unit circle (x', y') frame.
+        float p1x = prev_cos - t * prev_sin;
+        float p1y = prev_sin + t * prev_cos;
+        float p2x = c1 + t * s1;
+        float p2y = s1 - t * c1;
+
+        // Scale by (rx, ry), rotate by phi, translate by center.
+        auto map = [&](float px, float py, float& ox, float& oy) {
+            float xs = px * rx;
+            float ys = py * ry;
+            ox = cos_phi * xs - sin_phi * ys + cx;
+            oy = sin_phi * xs + cos_phi * ys + cy;
+        };
+
+        float c1x, c1y, c2x, c2y, ex, ey;
+        map(p1x, p1y, c1x, c1y);
+        map(p2x, p2y, c2x, c2y);
+        map(c1, s1, ex, ey);
+
+        // Last segment snaps exactly to (x, y) to avoid rounding drift.
+        if (s == segments - 1) {
+            ex = x;
+            ey = y;
+        }
+
+        path->cubic_to(c1x, c1y, c2x, c2y, ex, ey);
+
+        a = a1;
+        prev_cos = c1;
+        prev_sin = s1;
+    }
 }
 
 void RivePath::parse_svg(String path_data) {
@@ -137,6 +268,7 @@ void RivePath::parse_svg(String path_data) {
     float cur_x = 0, cur_y = 0;
     float start_x = 0, start_y = 0;
     float last_ctrl_x = 0, last_ctrl_y = 0;
+    float last_quad_x = 0, last_quad_y = 0;
     char32_t last_cmd = 0;
     
     while (i < len) {
@@ -268,6 +400,77 @@ void RivePath::parse_svg(String path_data) {
                 cur_x += x; cur_y += y;
                 break;
             }
+            case 'Q': {
+                float x1 = read_float(path_data, i);
+                float y1 = read_float(path_data, i);
+                float x = read_float(path_data, i);
+                float y = read_float(path_data, i);
+                quad_to(x1, y1, x, y);
+                last_quad_x = x1; last_quad_y = y1;
+                last_ctrl_x = x1; last_ctrl_y = y1;
+                cur_x = x; cur_y = y;
+                break;
+            }
+            case 'q': {
+                float x1 = read_float(path_data, i);
+                float y1 = read_float(path_data, i);
+                float x = read_float(path_data, i);
+                float y = read_float(path_data, i);
+                float ax = cur_x + x1, ay = cur_y + y1;
+                quad_to(ax, ay, cur_x + x, cur_y + y);
+                last_quad_x = ax; last_quad_y = ay;
+                last_ctrl_x = ax; last_ctrl_y = ay;
+                cur_x += x; cur_y += y;
+                break;
+            }
+            case 'T': {
+                float x = read_float(path_data, i);
+                float y = read_float(path_data, i);
+                float ax = 2 * cur_x - last_quad_x;
+                float ay = 2 * cur_y - last_quad_y;
+                quad_to(ax, ay, x, y);
+                last_quad_x = ax; last_quad_y = ay;
+                last_ctrl_x = ax; last_ctrl_y = ay;
+                cur_x = x; cur_y = y;
+                break;
+            }
+            case 't': {
+                float x = read_float(path_data, i);
+                float y = read_float(path_data, i);
+                float ax = 2 * cur_x - last_quad_x;
+                float ay = 2 * cur_y - last_quad_y;
+                quad_to(ax, ay, cur_x + x, cur_y + y);
+                last_quad_x = ax; last_quad_y = ay;
+                last_ctrl_x = ax; last_ctrl_y = ay;
+                cur_x += x; cur_y += y;
+                break;
+            }
+            case 'A': {
+                float rx = read_float(path_data, i);
+                float ry = read_float(path_data, i);
+                float ang = read_float(path_data, i);
+                float la = read_float(path_data, i);
+                float sw = read_float(path_data, i);
+                float x = read_float(path_data, i);
+                float y = read_float(path_data, i);
+                svg_arc_to(this, rx, ry, ang, la != 0.0f, sw != 0.0f, x, y, cur_x, cur_y);
+                cur_x = x; cur_y = y;
+                last_ctrl_x = cur_x; last_ctrl_y = cur_y;
+                break;
+            }
+            case 'a': {
+                float rx = read_float(path_data, i);
+                float ry = read_float(path_data, i);
+                float ang = read_float(path_data, i);
+                float la = read_float(path_data, i);
+                float sw = read_float(path_data, i);
+                float x = read_float(path_data, i);
+                float y = read_float(path_data, i);
+                svg_arc_to(this, rx, ry, ang, la != 0.0f, sw != 0.0f, cur_x + x, cur_y + y, cur_x, cur_y);
+                cur_x += x; cur_y += y;
+                last_ctrl_x = cur_x; last_ctrl_y = cur_y;
+                break;
+            }
             case 'Z':
             case 'z': {
                 close();
@@ -279,6 +482,13 @@ void RivePath::parse_svg(String path_data) {
                 // Unknown command, skip
                 i++;
                 break;
+        }
+
+        // For T/t smooth-quad reflection: if the last executed command was not
+        // a quadratic, the implied previous control point is the current point.
+        if (last_cmd != 'Q' && last_cmd != 'q' && last_cmd != 'T' && last_cmd != 't') {
+            last_quad_x = cur_x;
+            last_quad_y = cur_y;
         }
     }
 }
@@ -306,6 +516,9 @@ void RivePaint::_bind_methods() {
     ClassDB::bind_method(D_METHOD("set_join", "join"), &RivePaint::set_join);
     ClassDB::bind_method(D_METHOD("set_cap", "cap"), &RivePaint::set_cap);
     ClassDB::bind_method(D_METHOD("set_blend_mode", "blend_mode"), &RivePaint::set_blend_mode);
+    ClassDB::bind_method(D_METHOD("set_feather", "feather"), &RivePaint::set_feather);
+    ClassDB::bind_method(D_METHOD("set_gradient", "gradient"), &RivePaint::set_gradient);
+    ClassDB::bind_method(D_METHOD("get_gradient"), &RivePaint::get_gradient);
 }
 
 void RivePaint::_apply_properties() {
@@ -322,6 +535,13 @@ void RivePaint::_apply_properties() {
     render_paint->join((rive::StrokeJoin)join);
     render_paint->cap((rive::StrokeCap)cap);
     render_paint->blendMode((rive::BlendMode)blend_mode);
+    render_paint->feather(feather);
+    if (gradient.is_valid()) {
+        rive::Factory* factory = RiveRenderRegistry::get_singleton()->get_factory();
+        render_paint->shader(gradient->get_shader_rcp(factory));
+    } else {
+        render_paint->shader(rive::rcp<rive::RenderShader>(nullptr));
+    }
 }
 
 void RivePaint::set_color(Color p_color) {
@@ -384,6 +604,31 @@ void RivePaint::set_blend_mode(int p_blend_mode) {
     if (render_paint) render_paint->blendMode((rive::BlendMode)blend_mode);
 }
 
+void RivePaint::set_feather(float p_feather) {
+    feather = p_feather;
+    if (!render_paint) {
+        rive::Factory* factory = RiveRenderRegistry::get_singleton()->get_factory();
+        if (factory) render_paint = factory->makeRenderPaint();
+    }
+    if (render_paint) render_paint->feather(feather);
+}
+
+void RivePaint::set_gradient(Ref<RiveGradient> p_gradient) {
+    gradient = p_gradient;
+    if (!render_paint) {
+        rive::Factory* factory = RiveRenderRegistry::get_singleton()->get_factory();
+        if (factory) render_paint = factory->makeRenderPaint();
+    }
+    if (render_paint) {
+        rive::Factory* factory = RiveRenderRegistry::get_singleton()->get_factory();
+        if (gradient.is_valid() && factory) {
+            render_paint->shader(gradient->get_shader_rcp(factory));
+        } else {
+            render_paint->shader(rive::rcp<rive::RenderShader>(nullptr));
+        }
+    }
+}
+
 rive::RenderPaint* RivePaint::get_render_paint(rive::Factory* factory) {
     if (!render_paint && factory) {
         render_paint = factory->makeRenderPaint();
@@ -402,6 +647,8 @@ void RiveRendererWrapper::_bind_methods() {
     ClassDB::bind_method(D_METHOD("scale", "x", "y"), &RiveRendererWrapper::scale);
     ClassDB::bind_method(D_METHOD("rotate", "angle"), &RiveRendererWrapper::rotate);
     ClassDB::bind_method(D_METHOD("draw_path", "path", "paint"), &RiveRendererWrapper::draw_path);
+    ClassDB::bind_method(D_METHOD("clip_path", "path"), &RiveRendererWrapper::clip_path);
+    ClassDB::bind_method(D_METHOD("draw_image", "image", "opacity", "blend_mode"), &RiveRendererWrapper::draw_image);
 }
 
 void RiveRendererWrapper::save() {
@@ -435,4 +682,119 @@ void RiveRendererWrapper::draw_path(Ref<RivePath> path, Ref<RivePaint> paint) {
             renderer->drawPath(path->get_render_path(factory), paint->get_render_paint(factory));
         }
     }
+}
+
+void RiveRendererWrapper::clip_path(Ref<RivePath> path) {
+    if (renderer && path.is_valid()) {
+        rive::Factory* factory = RiveRenderRegistry::get_singleton()->get_factory();
+        if (factory) {
+            renderer->clipPath(path->get_render_path(factory));
+        }
+    }
+}
+
+void RiveRendererWrapper::draw_image(Ref<RiveImage> image, float opacity, int blend_mode) {
+    if (renderer && image.is_valid() && image->is_loaded()) {
+        renderer->drawImage(image->get_render_image(),
+                            rive::ImageSampler::LinearClamp(),
+                            (rive::BlendMode)blend_mode,
+                            opacity);
+    }
+}
+
+// --- RiveImage ---
+
+void RiveImage::_bind_methods() {
+    ClassDB::bind_method(D_METHOD("load_from_buffer", "bytes"), &RiveImage::load_from_buffer);
+    ClassDB::bind_method(D_METHOD("load_from_texture", "texture"), &RiveImage::load_from_texture);
+    ClassDB::bind_method(D_METHOD("get_width"), &RiveImage::get_width);
+    ClassDB::bind_method(D_METHOD("get_height"), &RiveImage::get_height);
+    ClassDB::bind_method(D_METHOD("is_loaded"), &RiveImage::is_loaded);
+}
+
+bool RiveImage::load_from_buffer(PackedByteArray bytes) {
+    rive::Factory* factory = RiveRenderRegistry::get_singleton()->get_factory();
+    if (!factory) {
+        UtilityFunctions::push_warning("RiveImage: factory not ready, cannot decode image yet.");
+        return false;
+    }
+    if (bytes.size() == 0) return false;
+    rive::Span<const uint8_t> span(bytes.ptr(), (size_t)bytes.size());
+    render_image = factory->decodeImage(span);
+    if (render_image) {
+        width = render_image->width();
+        height = render_image->height();
+        return true;
+    }
+    width = 0;
+    height = 0;
+    return false;
+}
+
+bool RiveImage::load_from_texture(Ref<Texture2D> texture) {
+    if (texture.is_null()) return false;
+    Ref<Image> img = texture->get_image();
+    if (img.is_null() || img->is_empty()) return false;
+    PackedByteArray png = img->save_png_to_buffer();
+    if (png.size() == 0) return false;
+    return load_from_buffer(png);
+}
+
+// --- RiveGradient ---
+
+void RiveGradient::_bind_methods() {
+    ClassDB::bind_method(D_METHOD("set_linear", "from", "to"), &RiveGradient::set_linear);
+    ClassDB::bind_method(D_METHOD("set_radial", "center", "radius"), &RiveGradient::set_radial);
+    ClassDB::bind_method(D_METHOD("set_stops", "colors", "stops"), &RiveGradient::set_stops);
+}
+
+void RiveGradient::set_linear(Vector2 from, Vector2 to) {
+    is_radial = false;
+    sx = from.x; sy = from.y;
+    ex = to.x; ey = to.y;
+    dirty = true;
+}
+
+void RiveGradient::set_radial(Vector2 center, float radius) {
+    is_radial = true;
+    sx = center.x; sy = center.y;
+    ex = radius; ey = 0.0f;
+    dirty = true;
+}
+
+void RiveGradient::set_stops(PackedColorArray p_colors, PackedFloat32Array p_stops) {
+    colors = p_colors;
+    stops = p_stops;
+    dirty = true;
+}
+
+rive::rcp<rive::RenderShader> RiveGradient::get_shader_rcp(rive::Factory* factory) {
+    if (!factory) return rive::rcp<rive::RenderShader>(nullptr);
+    if (dirty || !shader) {
+        size_t count = (size_t)Math::min(colors.size(), stops.size());
+        if (count < 2) return rive::rcp<rive::RenderShader>(nullptr);
+
+        std::vector<rive::ColorInt> color_ints(count);
+        std::vector<float> stop_floats(count);
+        for (size_t i = 0; i < count; i++) {
+            Color c = colors[i];
+            unsigned int r = (unsigned int)(c.r * 255);
+            unsigned int g = (unsigned int)(c.g * 255);
+            unsigned int b = (unsigned int)(c.b * 255);
+            unsigned int a = (unsigned int)(c.a * 255);
+            color_ints[i] = (a << 24) | (r << 16) | (g << 8) | b;
+            stop_floats[i] = stops[i];
+        }
+        if (is_radial) {
+            shader = factory->makeRadialGradient(sx, sy, ex, color_ints.data(), stop_floats.data(), count);
+        } else {
+            shader = factory->makeLinearGradient(sx, sy, ex, ey, color_ints.data(), stop_floats.data(), count);
+        }
+        dirty = false;
+    }
+    return shader;
+}
+
+rive::RenderShader* RiveGradient::get_shader(rive::Factory* factory) {
+    return get_shader_rcp(factory).get();
 }

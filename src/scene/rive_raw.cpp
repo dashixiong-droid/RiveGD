@@ -2,6 +2,9 @@
 #include <godot_cpp/core/class_db.hpp>
 
 void RiveRaw::_bind_methods() {
+    ClassDB::bind_method(D_METHOD("set_bounds", "bounds"), &RiveRaw::set_bounds);
+    ClassDB::bind_method(D_METHOD("get_bounds"), &RiveRaw::get_bounds);
+    ADD_PROPERTY(PropertyInfo(Variant::RECT2, "bounds"), "set_bounds", "get_bounds");
     ADD_SIGNAL(MethodInfo("draw_rive", PropertyInfo(Variant::OBJECT, "renderer", PROPERTY_HINT_RESOURCE_TYPE, "RiveRendererWrapper")));
 }
 
@@ -10,6 +13,11 @@ RiveRaw::RiveRaw() {
 }
 
 RiveRaw::~RiveRaw() {}
+
+void RiveRaw::set_bounds(const Rect2 &p_bounds) {
+    bounds = p_bounds;
+    queue_redraw();
+}
 
 void RiveRaw::draw(rive::Renderer* renderer) {
     if (renderer_wrapper.is_valid()) {

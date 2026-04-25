@@ -3,6 +3,7 @@
 
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/classes/image_texture.hpp>
+#include <godot_cpp/classes/texture2d.hpp>
 #include "rive/renderer.hpp"
 #include "rive/factory.hpp"
 #include "rive/math/mat2d.hpp"
@@ -34,14 +35,42 @@ public:
 
     void move_to(float x, float y);
     void line_to(float x, float y);
+    void quad_to(float cx, float cy, float x, float y);
     void cubic_to(float ox, float oy, float ix, float iy, float x, float y);
     void close();
     void reset();
+    void add_rect(float x, float y, float w, float h);
+    void add_oval(float x, float y, float w, float h);
+    void add_circle(float cx, float cy, float radius);
+    void add_path(Ref<RivePath> other);
     void set_fill_rule(int rule);
     
     void parse_svg(String path_data);
 
     rive::RenderPath* get_render_path(rive::Factory* factory);
+};
+
+class RiveGradient : public RefCounted {
+    GDCLASS(RiveGradient, RefCounted);
+
+private:
+    rive::rcp<rive::RenderShader> shader;
+    bool is_radial = false;
+    float sx = 0, sy = 0, ex = 0, ey = 0; // linear: start->end; radial: (sx,sy) center, ex radius
+    PackedColorArray colors;
+    PackedFloat32Array stops;
+    bool dirty = true;
+
+protected:
+    static void _bind_methods();
+
+public:
+    void set_linear(Vector2 from, Vector2 to);
+    void set_radial(Vector2 center, float radius);
+    void set_stops(PackedColorArray p_colors, PackedFloat32Array p_stops);
+
+    rive::RenderShader* get_shader(rive::Factory* factory);
+    rive::rcp<rive::RenderShader> get_shader_rcp(rive::Factory* factory);
 };
 
 class RivePaint : public RefCounted {
@@ -57,6 +86,8 @@ private:
     int join = 0;
     int cap = 0;
     int blend_mode = 3; // SrcOver
+    float feather = 0.0f;
+    Ref<RiveGradient> gradient;
 
 protected:
     static void _bind_methods();
@@ -71,6 +102,9 @@ public:
     void set_join(int join);
     void set_cap(int cap);
     void set_blend_mode(int blend_mode);
+    void set_feather(float feather);
+    void set_gradient(Ref<RiveGradient> gradient);
+    Ref<RiveGradient> get_gradient() const { return gradient; }
 
     rive::RenderPaint* get_render_paint(rive::Factory* factory);
     void _apply_properties();
@@ -96,6 +130,30 @@ public:
     void scale(float x, float y);
     void rotate(float angle);
     void draw_path(Ref<RivePath> path, Ref<RivePaint> paint);
+    void clip_path(Ref<RivePath> path);
+    void draw_image(Ref<class RiveImage> image, float opacity, int blend_mode);
+};
+
+class RiveImage : public RefCounted {
+    GDCLASS(RiveImage, RefCounted);
+
+private:
+    rive::rcp<rive::RenderImage> render_image;
+    int width = 0;
+    int height = 0;
+
+protected:
+    static void _bind_methods();
+
+public:
+    bool load_from_buffer(PackedByteArray bytes);
+    bool load_from_texture(Ref<Texture2D> texture);
+
+    int get_width() const { return width; }
+    int get_height() const { return height; }
+    bool is_loaded() const { return render_image.get() != nullptr; }
+
+    rive::RenderImage* get_render_image() const { return render_image.get(); }
 };
 
 #endif
