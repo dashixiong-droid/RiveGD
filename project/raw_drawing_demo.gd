@@ -66,6 +66,12 @@ var _wave_frequency: float = 1.6
 var _wave_phase: float = 0.0
 var _text_failed: bool = false
 
+# Jelly blob morph (section 11)
+var _jelly_src: RivePath
+var _jelly_fill: RivePaint
+var _jelly_stroke: RivePaint
+var _jelly_phase: float = 0.0
+
 
 func _ensure_resources() -> void:
 	if _bg_paint == null:
@@ -219,6 +225,26 @@ func _ensure_resources() -> void:
 				var last = _glyph_paths[_glyph_paths.size() - 1]
 				_glyph_total_w = float(last["x"]) + float(last["advance"])
 
+	# Jelly blob source: a unit-ish circle approximated with cubics.
+	if _jelly_src == null:
+		_jelly_src = RivePath.new()
+		# Add a circle of radius 100 centered at origin via add_oval.
+		_jelly_src.add_oval(-100, -100, 200, 200)
+		var jg := RiveGradient.new()
+		jg.set_radial(Vector2(0, 0), 130.0)
+		jg.set_stops(
+			PackedColorArray([Color(1.0, 0.85, 0.4, 1.0), Color(0.9, 0.3, 0.6, 1.0)]),
+			PackedFloat32Array([0.0, 1.0])
+		)
+		_jelly_fill = RivePaint.new()
+		_jelly_fill.set_style(1)
+		_jelly_fill.set_gradient(jg)
+		_jelly_stroke = RivePaint.new()
+		_jelly_stroke.set_style(0)
+		_jelly_stroke.set_color(Color(0.15, 0.05, 0.2, 1.0))
+		_jelly_stroke.set_thickness(3.0)
+		_jelly_stroke.set_join(2)
+
 
 func _on_draw_rive(renderer: RiveRendererWrapper) -> void:
 	_ensure_resources()
@@ -301,6 +327,17 @@ func _on_draw_rive(renderer: RiveRendererWrapper) -> void:
 			var warped := src.morph(warp)
 			renderer.draw_path(warped, _text_paint_a)
 			renderer.draw_path(warped, _text_paint_b)
+		renderer.restore()
+
+	# 11) Non-text morph showcase: circle warped into a jelly blob.
+	if _jelly_src:
+		renderer.save()
+		renderer.translate(canvas_size.x - 200, canvas_size.y - 400)
+		_jelly_phase = _time * 1.4
+		var jelly_warp := Callable(self, "_jelly_warp")
+		var morphed := _jelly_src.morph(jelly_warp)
+		renderer.draw_path(morphed, _jelly_fill)
+		renderer.draw_path(morphed, _jelly_stroke)
 		renderer.restore()
 
 	# 8) add_poly + get_bounds: animated polygon with its bounding box overlay.
@@ -435,3 +472,16 @@ func _wave_warp(p: Vector2) -> Vector2:
 	var primary : float = sin(angle) * _wave_amplitude
 	var secondary : float = sin(angle * 2.0) * (_wave_amplitude * 0.3)
 	return Vector2(p.x, p.y + primary + secondary)
+
+
+func _jelly_warp(p: Vector2) -> Vector2:
+	# Radial squish: deform along the angular direction with multi-frequency sine.
+	var r : float = p.length()
+	if r < 0.001:
+		return p
+	var theta : float = atan2(p.y, p.x)
+	var bump : float = 14.0 * sin(theta * 3.0 + _jelly_phase) \
+		+ 8.0 * sin(theta * 5.0 - _jelly_phase * 1.7) \
+		+ 5.0 * sin(theta * 7.0 + _jelly_phase * 0.6)
+	var nr : float = r + bump
+	return Vector2(cos(theta) * nr, sin(theta) * nr)
