@@ -124,7 +124,7 @@ def generate_metal_shaders(shaders_dir, out_dir):
 
         cmd = [
             'xcrun', '-sdk', 'macosx', 'metal', '-std=macos-metal2.3',
-            '-mmacosx-version-min=10.0', '-I', out_dir, '-ffast-math',
+            '-mmacosx-version-min=11.0', '-I', out_dir, '-ffast-math',
             '-ffp-contract=fast', '-fpreserve-invariance', '-fvisibility=hidden',
             '-c', metal_file, '-o', air_out
         ]

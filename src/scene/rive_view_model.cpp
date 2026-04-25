@@ -694,8 +694,9 @@ bool RiveViewModelInstance::_get(const StringName &p_name, Variant &r_ret) const
 void RiveViewModelInstance::_get_property_list(List<PropertyInfo> *p_list) const {
     if (!instance) return;
     
-    std::vector<rive::ViewModelInstanceValue*> props = instance->propertyValues();
-    for (auto prop : props) {
+    const auto& props = instance->propertyValues();
+    for (const auto& prop_rcp : props) {
+        rive::ViewModelInstanceValue* prop = prop_rcp.get();
         if (!prop) continue;
         
         String name = prop->name().c_str();

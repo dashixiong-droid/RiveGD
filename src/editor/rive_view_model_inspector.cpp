@@ -56,8 +56,9 @@ RiveControl *RiveViewModelInspector::_get_control() const {
 void RiveViewModelInspector::_collect_properties(rive::ViewModelInstance *vm, String prefix, int indent, std::vector<PropertyEntry> &out_list) {
     if (!vm) return;
 
-    std::vector<rive::ViewModelInstanceValue *> props = vm->propertyValues();
-    for (auto value : props) {
+    const auto& props = vm->propertyValues();
+    for (const auto& value_rcp : props) {
+        rive::ViewModelInstanceValue* value = value_rcp.get();
         if (!value) continue;
 
         String name = value->name().c_str();

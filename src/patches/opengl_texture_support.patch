@@ -1,6 +1,21 @@
---- a/renderer/src/gl/render_context_gl_impl.cpp	2025-11-28 03:46:09
-+++ b/renderer/src/gl/render_context_gl_impl.cpp	2025-11-30 04:50:49
-@@ -221,10 +221,11 @@
+diff --git a/renderer/src/gl/render_buffer_gl_impl.cpp b/renderer/src/gl/render_buffer_gl_impl.cpp
+index 649f6e4d..62793fb5 100644
+--- a/renderer/src/gl/render_buffer_gl_impl.cpp
++++ b/renderer/src/gl/render_buffer_gl_impl.cpp
+@@ -110,7 +110,7 @@ bool RenderBufferGLImpl::canMapBuffer() const
+ {
+     // WebGL doesn't support buffer mapping. Don't use it on ANGLE either since
+     // we don't trust ANGLE with features that haven't been validated by WebGL.
+-    return !m_state->capabilities().isANGLESystemDriver &&
++    return false && !m_state->capabilities().isANGLESystemDriver &&
+            // NVIDIA gives performance warnings when mapping GL_STATIC_DRAW
+            // buffers.
+            !enums::is_flag_set(flags(),
+diff --git a/renderer/src/gl/render_context_gl_impl.cpp b/renderer/src/gl/render_context_gl_impl.cpp
+index aefc4dd4..70df9612 100644
+--- a/renderer/src/gl/render_context_gl_impl.cpp
++++ b/renderer/src/gl/render_context_gl_impl.cpp
+@@ -224,10 +224,11 @@ RenderContextGLImpl::RenderContextGLImpl(
                                                std::size(colorRampSources),
                                                m_capabilities);
      m_colorRampProgram.link();
@@ -16,7 +31,7 @@
  
      m_state->bindVAO(m_colorRampVAO);
      glEnableVertexAttribArray(0);
-@@ -281,10 +282,11 @@
+@@ -288,10 +289,11 @@ RenderContextGLImpl::RenderContextGLImpl(
      glutils::Uniform1iByName(m_tessellateProgram,
                               GLSL_featherTexture,
                               FEATHER_TEXTURE_IDX);
@@ -32,7 +47,7 @@
      if (!m_capabilities.ARB_shader_storage_buffer_object)
      {
          // Our GL driver doesn't support storage buffers. We polyfill these
-@@ -634,7 +636,9 @@
+@@ -715,7 +717,9 @@ protected:
          // WebGL doesn't support buffer mapping. Don't use it on ANGLE either
          // since we don't trust ANGLE with features that haven't been validated
          // by WebGL.
@@ -43,7 +58,7 @@
          {
              m_state->bindBuffer(m_target, m_bufferID);
              return glMapBufferRange(m_target,
-@@ -657,7 +661,7 @@
+@@ -738,7 +742,7 @@ protected:
          // WebGL doesn't support buffer mapping. Don't use it on ANGLE either
          // since we don't trust ANGLE with features that haven't been validated
          // by WebGL.
@@ -52,7 +67,7 @@
          {
              glUnmapBuffer(m_target);
          }
-@@ -915,9 +919,11 @@
+@@ -996,9 +1000,11 @@ void RenderContextGLImpl::AtlasProgram::compile(
                                       capabilities);
      m_program.link();
      state->bindProgram(m_program);
@@ -67,7 +82,7 @@
      glutils::Uniform1iByName(m_program,
                               GLSL_tessVertexTexture,
                               TESS_VERTEX_TEXTURE_IDX);
-@@ -1431,9 +1437,11 @@
+@@ -1603,9 +1609,11 @@ bool RenderContextGLImpl::DrawProgram::advanceCreation(
      }
  
      m_state->bindProgram(m_id);
@@ -82,8 +97,8 @@
  
      const bool isImageDraw = gpu::DrawTypeIsImageDraw(drawType);
      const bool isTessellationDraw = is_tessellation_draw(drawType);
-@@ -1445,10 +1453,9 @@
-                              gpu::ShaderMiscFlags::borrowedCoveragePass));
+@@ -1618,10 +1626,9 @@ bool RenderContextGLImpl::DrawProgram::advanceCreation(
+                                 gpu::ShaderMiscFlags::borrowedCoveragePass);
      if (isImageDraw)
      {
 -        glUniformBlockBinding(
@@ -96,16 +111,16 @@
      }
      if (isTessellationDraw)
      {
-@@ -2521,6 +2528,16 @@
-                "%u.%u",
-                &capabilities.contextVersionMajor,
+@@ -2798,6 +2805,16 @@ std::unique_ptr<RenderContext> RenderContextGLImpl::MakeContext(
                 &capabilities.contextVersionMinor);
+         capabilities.vendorDriverVersionMajor = 0;
+         capabilities.vendorDriverVersionMinor = 0;
 +
 +        // Force GLES mode for Desktop GL < 4.0 to support Godot's OpenGL 3 backend (GL 3.3)
 +        if (capabilities.contextVersionMajor < 4)
 +        {
 +            capabilities.isGLES = true;
-+            // Clamp to 3.0 to avoid enabling GLES 3.1+ features (SSBO, Images) 
++            // Clamp to 3.0 to avoid enabling GLES 3.1+ features (SSBO, Images)
 +            // which are not guaranteed in Desktop GL 3.3.
 +            capabilities.contextVersionMajor = 3;
 +            capabilities.contextVersionMinor = 0;
@@ -113,8 +128,8 @@
      }
      else if (capabilities.isPowerVR)
      {
-@@ -2539,9 +2556,9 @@
-                &capabilities.contextVersionMinor);
+@@ -2818,9 +2835,9 @@ std::unique_ptr<RenderContext> RenderContextGLImpl::MakeContext(
+         capabilities.vendorDriverVersionMinor = 0;
      }
  #ifdef RIVE_DESKTOP_GL
 -    assert(capabilities.contextVersionMajor == GLAD_GL_version_major);
@@ -125,8 +140,8 @@
 +    // assert(capabilities.isGLES == static_cast<bool>(GLAD_GL_version_es));
  #endif
  
-     if (capabilities.isGLES)
-@@ -2612,6 +2629,16 @@
+     if (!capabilities.isAdreno ||
+@@ -2902,6 +2919,16 @@ std::unique_ptr<RenderContext> RenderContextGLImpl::MakeContext(
          capabilities.EXT_clip_cull_distance = true;
      }
  
@@ -143,7 +158,7 @@
  #ifndef RIVE_WEBGL
      GLint extensionCount;
      glGetIntegerv(GL_NUM_EXTENSIONS, &extensionCount);
-@@ -2622,7 +2649,8 @@
+@@ -2912,7 +2939,8 @@ std::unique_ptr<RenderContext> RenderContextGLImpl::MakeContext(
          if (strcmp(ext, "GL_ANGLE_base_vertex_base_instance_shader_builtin") ==
              0)
          {
@@ -153,7 +168,7 @@
          }
          else if (strcmp(ext, "GL_ANGLE_shader_pixel_local_storage") == 0)
          {
-@@ -2651,15 +2679,18 @@
+@@ -2945,15 +2973,18 @@ std::unique_ptr<RenderContext> RenderContextGLImpl::MakeContext(
          }
          else if (strcmp(ext, "GL_ARB_shader_image_load_store") == 0)
          {
@@ -175,7 +190,7 @@
          }
          else if (strcmp(ext, "GL_KHR_blend_equation_advanced") == 0)
          {
-@@ -2675,7 +2706,8 @@
+@@ -2969,7 +3000,8 @@ std::unique_ptr<RenderContext> RenderContextGLImpl::MakeContext(
          }
          else if (strcmp(ext, "GL_EXT_base_instance") == 0)
          {
@@ -185,14 +200,3 @@
          }
          else if (strcmp(ext, "GL_EXT_clip_cull_distance") == 0 ||
                   strcmp(ext, "GL_ANGLE_clip_cull_distance") == 0)
---- a/renderer/src/gl/render_buffer_gl_impl.cpp	2025-11-28 03:46:09
-+++ b/renderer/src/gl/render_buffer_gl_impl.cpp	2025-11-30 04:55:23
-@@ -107,7 +107,7 @@
- {
-     // WebGL doesn't support buffer mapping. Don't use it on ANGLE either since
-     // we don't trust ANGLE with features that haven't been validated by WebGL.
--    return !m_state->capabilities().isANGLESystemDriver &&
-+    return false && !m_state->capabilities().isANGLESystemDriver &&
-            // NVIDIA gives performance warnings when mapping GL_STATIC_DRAW
-            // buffers.
-            !(flags() & RenderBufferFlags::mappedOnceAtInitialization);
