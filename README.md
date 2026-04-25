@@ -1,8 +1,12 @@
 # RiveGD
 
-An **unofficial** Rive runtime with hardware accelerated GPU Renderer for Godot 4 as a GDExtension. Implemented Rive Renderer as rendering backend instead of CPU approaches with Skia. Artboards are directly rendered into an Texture.
+[![Release Builds](https://github.com/maidopi-usagi/RiveGD/actions/workflows/release.yml/badge.svg)](https://github.com/maidopi-usagi/RiveGD/actions/workflows/release.yml)
+
+An **unofficial** Rive runtime with hardware accelerated GPU Renderer for Godot 4 as a GDExtension. Implemented Rive Renderer as rendering backend instead of CPU approaches with Skia. Artboards are directly rendered into a Texture.
 
 WIP!! PRs are welcomed.
+
+> Prebuilt binaries (macOS-universal, Windows-x86_64, Linux-x86_64; debug + release) are attached to every [GitHub Release](https://github.com/maidopi-usagi/RiveGD/releases).
 
 
 https://github.com/user-attachments/assets/615cefe9-f9ba-4821-b8d4-bf70510b7d0c
@@ -19,11 +23,19 @@ https://github.com/user-attachments/assets/615cefe9-f9ba-4821-b8d4-bf70510b7d0c
 - **Godot Integration**:
     - `RiveControl`: A Control node for UI integration.
     - `RiveFileInstance`: A Node2D for 2D scene integration.
+    - `RiveCanvas2D` + `RiveRaw`: 2D canvas that walks all descendants and exposes a `draw_rive(renderer)` signal for fully custom GDScript-driven Rive drawing.
     - `RiveFile`: Resource-based workflow for `.riv` files. Supports **hot-reloading** when files are updated externally.
+    - `RiveSVG` / SVG import: load `.svg` files as Rive paths and draw them through the Rive renderer.
+- **Custom Vector Drawing API** (GDScript-friendly):
+    - `RivePath` (move/line/cubic/quad/close, `add_rect/add_oval/add_circle/add_poly/add_path`, `parse_svg`)
+    - `RivePaint` (fill/stroke, color, gradient, thickness, join/cap, feather)
+    - `RiveGradient` (linear/radial with color stops)
+    - `RiveImage` from a Godot `Texture2D`, drawable via `draw_image` / `draw_image_mesh`
+    - `RiveFont` + `RiveText` (multi-run text shaping via `shape_glyphs()`)
 - **Rive Features Support**:
     - **State Machines**: Full support for State Machines, Inputs (Number, Boolean, Trigger), and Listeners.
     - **ViewModels**: Support for Rive ViewModels including Text, Number, Boolean, Enum, Color, and Triggers.
-      - **Textures Sharing**: Pass Godot's Texture resources effciently to Rive(via `ViewModelImageProperty`)
+      - **Textures Sharing**: Pass Godot's Texture resources efficiently to Rive (via `ViewModelImageProperty`)
     - **Data Binding**: Update Rive properties dynamically from Godot via GDScript or the Inspector.
 - **Interactivity**:
     - Mouse/Pointer input forwarding (Hover, Click, Move).
@@ -43,7 +55,8 @@ DO NOT USE IN PRODUCTION as APIs will change and stability is not tested well.
 1. **Import**: Drop your `.riv` or `.svg` files into the Godot project. They will be automatically imported as `RiveFile` resources.
 2. **UI**: Add a `RiveControl` node to your scene for UI elements.
 3. **2D Scene**: Add a `RiveFileInstance` or `RiveMultiInstance` node under `RiveCanvas2D` for 2D game objects.
-4. **Configuration**:
+4. **Custom drawing**: Add a `RiveRaw` under `RiveCanvas2D`, connect its `draw_rive(renderer)` signal, and use `RivePath`/`RivePaint`/`RiveGradient`/`RiveImage`/`RiveText` to draw whatever you want. See `project/raw_drawing_demo.gd` (12 sections covering paths, gradients, clipping, images, image-mesh, multi-run text, jelly morph, etc.) and `project/svg_demo.gd` (downloads the Ghostscript Tiger SVG and renders it).
+5. **Configuration**:
    - Assign the `Rive File` property in the inspector.
    - Select the desired **Artboard**.
    - Choose an **Animation** or **State Machine** to play.
@@ -51,7 +64,7 @@ DO NOT USE IN PRODUCTION as APIs will change and stability is not tested well.
 
 ## Limitations
 
-- **Not tested on:** Linux/Android/iOS
+- **Not tested on:** Android / iOS. Linux and Windows builds are produced by CI but only lightly smoke-tested.
 - **OpenGL backend:** Godot uses OpenGL3 while Rive needs 4+. Applied a small patch upon official repo to support OpenGL3
    - MacOS doesn't support native GLES fallback so cannot work on MacOS right now. I'll looking into this when I have time, maybe fallback to ANGLE when ANGLE backend got fixed.
    - ANGLE Backend: Godot official builds links ANGLE statically. I can only make it work using dynamic-linked libEGL and libGLESv2.
@@ -99,9 +112,12 @@ DO NOT USE IN PRODUCTION as APIs will change and stability is not tested well.
    ```
 
 2. **Generate Rive Shaders**:
-   Before compiling, you need to generate the shader headers for the Rive runtime.
+   Before compiling, you need to generate the shader headers for the Rive runtime. The third positional arg picks a platform-specific subset (`macos` / `windows` / `linuxbsd`); omit it to build all.
    ```bash
-   python3 scripts/build_shaders.py third-party/rive-runtime/renderer/src/shaders third-party/rive-runtime/renderer/include/generated/shaders
+   python3 scripts/build_shaders.py \
+       third-party/rive-runtime/renderer/src/shaders \
+       third-party/rive-runtime/renderer/include/generated/shaders \
+       macos
    ```
 
 3. **Compile the Extension**:
