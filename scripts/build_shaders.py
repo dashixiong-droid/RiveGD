@@ -239,7 +239,8 @@ def generate_vulkan_shaders(shaders_dir, out_dir):
         params = []
         if 'webgpu' in filename:
             params.append('-DPLS_IMPL_NONE')
-        elif 'clockwise' in filename:
+        elif 'clockwise' in filename and 'clockwise_atomic' not in filename:
+            # Match Rive Makefile's spirv_is_clockwise: clockwise but NOT clockwise_atomic.
             params.append('-DPLS_IMPL_STORAGE_TEXTURE')
         else:
             params.append('-DPLS_IMPL_SUBPASS_LOAD')
