@@ -46,6 +46,13 @@ var _poly_stroke: RivePaint
 var _bbox_paint: RivePaint
 var _bbox_path: RivePath
 
+# draw_image_mesh showcase
+const MESH_DIVS := 12
+const MESH_SIZE := 280.0
+var _mesh_verts: PackedVector2Array
+var _mesh_uvs: PackedVector2Array
+var _mesh_indices: PackedInt32Array
+
 
 func _ensure_resources() -> void:
 	if _bg_paint == null:
@@ -224,6 +231,14 @@ func _on_draw_rive(renderer: RiveRendererWrapper) -> void:
 		renderer.draw_image(_rive_image, 1.0, 3) # 3 = SrcOver
 		renderer.restore()
 
+	# 9) draw_image_mesh: a wavy textured grid at top-center.
+	if _rive_image and _rive_image.is_loaded():
+		_rebuild_mesh()
+		renderer.save()
+		renderer.translate(canvas_size.x * 0.5, 220)
+		renderer.draw_image_mesh(_rive_image, _mesh_verts, _mesh_uvs, _mesh_indices, 1.0, 3)
+		renderer.restore()
+
 	# 8) add_poly + get_bounds: animated polygon with its bounding box overlay.
 	_rebuild_poly_path()
 	renderer.save()
@@ -306,3 +321,42 @@ func _rebuild_poly_path() -> void:
 		r += 12.0 * sin(t * 2.0 + a * 3.0)
 		pts.push_back(Vector2(cos(a) * r, sin(a) * r))
 	_poly_path.add_poly(pts, true)
+
+
+func _ensure_mesh_topology() -> void:
+	if _mesh_indices.size() > 0:
+		return
+	var n := MESH_DIVS + 1
+	_mesh_uvs = PackedVector2Array()
+	_mesh_uvs.resize(n * n)
+	_mesh_verts = PackedVector2Array()
+	_mesh_verts.resize(n * n)
+	for j in range(n):
+		for i in range(n):
+			_mesh_uvs[j * n + i] = Vector2(float(i) / float(MESH_DIVS), float(j) / float(MESH_DIVS))
+	_mesh_indices = PackedInt32Array()
+	for j in range(MESH_DIVS):
+		for i in range(MESH_DIVS):
+			var a := j * n + i
+			var b := a + 1
+			var c := a + n
+			var d := c + 1
+			_mesh_indices.push_back(a); _mesh_indices.push_back(b); _mesh_indices.push_back(c)
+			_mesh_indices.push_back(b); _mesh_indices.push_back(d); _mesh_indices.push_back(c)
+
+
+func _rebuild_mesh() -> void:
+	_ensure_mesh_topology()
+	var n := MESH_DIVS + 1
+	var half := MESH_SIZE * 0.5
+	var t := _time
+	for j in range(n):
+		for i in range(n):
+			var u : float = float(i) / float(MESH_DIVS)
+			var v : float = float(j) / float(MESH_DIVS)
+			var x : float = lerpf(-half, half, u)
+			var y : float = lerpf(-half, half, v)
+			# Wave displacement.
+			x += 18.0 * sin(t * 2.0 + v * TAU)
+			y += 18.0 * cos(t * 2.0 + u * TAU)
+			_mesh_verts[j * n + i] = Vector2(x, y)
