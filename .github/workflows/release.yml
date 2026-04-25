@@ -71,7 +71,14 @@ jobs:
         with:
           install_runtime: false
           cache: true
-          stripdown: true
+          stripdown: false
+
+      - name: Verify Vulkan SDK headers (Windows)
+        if: matrix.config.platform == 'windows'
+        shell: bash
+        run: |
+          echo "VULKAN_SDK=$VULKAN_SDK"
+          ls "$VULKAN_SDK/Include/vulkan/vulkan.h"
 
       # DirectX-Headers (provides d3dx12.h) for the Rive D3D12 renderer.
       - name: Fetch DirectX-Headers (Windows)
