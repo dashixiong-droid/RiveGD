@@ -72,6 +72,14 @@ var _jelly_fill: RivePaint
 var _jelly_stroke: RivePaint
 var _jelly_phase: float = 0.0
 
+# Multi-run RiveText showcase (section 12)
+var _multi_text: RiveText
+var _multi_glyphs: Array = []   # cached shape_glyphs() output
+var _multi_total_w: float = 0.0
+var _multi_phase: float = 0.0
+var _multi_paint_a: RivePaint
+var _multi_paint_b: RivePaint
+
 
 func _ensure_resources() -> void:
 	if _bg_paint == null:
@@ -225,6 +233,22 @@ func _ensure_resources() -> void:
 				var last = _glyph_paths[_glyph_paths.size() - 1]
 				_glyph_total_w = float(last["x"]) + float(last["advance"])
 
+			# Multi-run RiveText: alternating coloured words on one baseline.
+			_multi_paint_a = RivePaint.new()
+			_multi_paint_a.set_style(1)
+			_multi_paint_a.set_color(Color(1.0, 0.85, 0.3, 1.0))
+			_multi_paint_b = RivePaint.new()
+			_multi_paint_b.set_style(1)
+			_multi_paint_b.set_color(Color(0.4, 0.8, 1.0, 1.0))
+			_multi_text = RiveText.new()
+			_multi_text.append_run("Rive ", _font, _multi_paint_a, 72.0, -1.0, 0.0)
+			_multi_text.append_run("multi-run ", _font, _multi_paint_b, 72.0, -1.0, 0.0)
+			_multi_text.append_run("warp", _font, _multi_paint_a, 72.0, -1.0, 0.0)
+			_multi_glyphs = _multi_text.shape_glyphs()
+			if _multi_glyphs.size() > 0:
+				var lastm = _multi_glyphs[_multi_glyphs.size() - 1]
+				_multi_total_w = float(lastm["x"]) + float(lastm["advance"])
+
 	# Jelly blob source: a unit-ish circle approximated with cubics.
 	if _jelly_src == null:
 		_jelly_src = RivePath.new()
@@ -271,7 +295,7 @@ func _on_draw_rive(renderer: RiveRendererWrapper) -> void:
 	# 4) Clipping demo: animated circular clip reveals a radial-gradient burst.
 	_rebuild_clip_path()
 	renderer.save()
-	renderer.translate(canvas_size.x * 0.5, canvas_size.y * 0.5)
+	renderer.translate(canvas_size.x * 0.15, canvas_size.y * 0.5)
 	renderer.clip_path(_clip_path)
 	# Draw something larger than the clip; only the clipped region is visible.
 	renderer.draw_path(_burst_path, _clipped_fill)
@@ -338,6 +362,20 @@ func _on_draw_rive(renderer: RiveRendererWrapper) -> void:
 		var morphed := _jelly_src.morph(jelly_warp)
 		renderer.draw_path(morphed, _jelly_fill)
 		renderer.draw_path(morphed, _jelly_stroke)
+		renderer.restore()
+
+	# 12) Multi-run RiveText.shape_glyphs() + per-glyph wave warp.
+	if _multi_glyphs.size() > 0:
+		renderer.save()
+		renderer.translate(canvas_size.x * 0.5 - _multi_total_w * 0.5, canvas_size.y * 0.5 + 380)
+		_multi_phase = _time * 3.0
+		var mwarp := Callable(self, "_multi_warp")
+		for entry in _multi_glyphs:
+			var src : RivePath = entry["path"]
+			var p : RivePaint = entry["paint"]
+			var warped := src.morph(mwarp)
+			if p:
+				renderer.draw_path(warped, p)
 		renderer.restore()
 
 	# 8) add_poly + get_bounds: animated polygon with its bounding box overlay.
@@ -485,3 +523,14 @@ func _jelly_warp(p: Vector2) -> Vector2:
 		+ 5.0 * sin(theta * 7.0 + _jelly_phase * 0.6)
 	var nr : float = r + bump
 	return Vector2(cos(theta) * nr, sin(theta) * nr)
+
+
+func _multi_warp(p: Vector2) -> Vector2:
+	# Wave + vertical bob, normalized by total run width.
+	if _multi_total_w == 0.0:
+		return p
+	var nx : float = p.x / _multi_total_w
+	var angle : float = nx * 2.5 * TAU + _multi_phase
+	var dy : float = sin(angle) * 14.0 + cos(angle * 1.7) * 6.0
+	var dx : float = cos(angle * 0.5) * 4.0
+	return Vector2(p.x + dx, p.y + dy)
