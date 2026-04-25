@@ -48,7 +48,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install SCons
-        run: python -m pip install --upgrade pip scons
+        run: python -m pip install --upgrade pip scons ply
 
       # Linux deps: OpenGL / X11 headers + glslang/spirv-tools for Rive shader build.
       - name: Install Linux build deps
