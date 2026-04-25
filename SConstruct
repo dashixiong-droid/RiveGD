@@ -69,7 +69,7 @@ def _basename(node):
         return str(node)
 
 excludes = {"render_context_gl_impl.cpp", "render_buffer_gl_impl.cpp"}
-if extension_env["platform"] == "macos":
+if extension_env["platform"] != "windows":
     excludes.update({"rive_renderer_d3d12.cpp", "rive_renderer_d3d12.mm", "rive_renderer_d3d12.c"})
 
 filtered_sources = []
