@@ -666,9 +666,11 @@ void RivePaint::_apply_properties() {
     if (gradient.is_valid()) {
         rive::Factory* factory = RiveRenderRegistry::get_singleton()->get_factory();
         render_paint->shader(gradient->get_shader_rcp(factory));
-    } else {
-        render_paint->shader(rive::rcp<rive::RenderShader>(nullptr));
     }
+    // NOTE: Do NOT call render_paint->shader(null) when no gradient is set.
+    // In Rive's PLS renderer, an explicitly-null shader rcp puts the paint
+    // into "shader mode with no shader", causing solid-color fills to render
+    // as black silhouettes. Leaving the shader unset preserves color().
 }
 
 void RivePaint::set_color(Color p_color) {
@@ -750,9 +752,8 @@ void RivePaint::set_gradient(Ref<RiveGradient> p_gradient) {
         rive::Factory* factory = RiveRenderRegistry::get_singleton()->get_factory();
         if (gradient.is_valid() && factory) {
             render_paint->shader(gradient->get_shader_rcp(factory));
-        } else {
-            render_paint->shader(rive::rcp<rive::RenderShader>(nullptr));
         }
+        // See _apply_properties: never call shader(null), it forces black.
     }
 }
 
