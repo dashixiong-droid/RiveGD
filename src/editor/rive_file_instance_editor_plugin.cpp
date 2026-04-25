@@ -1,6 +1,7 @@
 #include "rive_file_instance_editor_plugin.h"
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/classes/editor_interface.hpp>
+#include <godot_cpp/classes/editor_undo_redo_manager.hpp>
 #include <godot_cpp/classes/control.hpp>
 #include <godot_cpp/classes/input_event_mouse_button.hpp>
 #include <godot_cpp/classes/input_event_mouse_motion.hpp>
@@ -120,6 +121,20 @@ bool RiveFileInstanceEditorPlugin::_forward_canvas_gui_input(const Ref<InputEven
                 return true;
             }
         } else if (dragging_handle >= 0) {
+            // Commit undo/redo action on release
+            Vector2 final_scale = node->get_scale();
+            Vector2 final_pos = node->get_position();
+            Vector2 start_scale = drag_start_scale;
+            Vector2 start_pos = drag_start_pos;
+
+            EditorUndoRedoManager *ur = get_undo_redo();
+            ur->create_action("Resize RiveFileInstance");
+            ur->add_do_method(node, "set_scale", final_scale);
+            ur->add_do_method(node, "set_position", final_pos);
+            ur->add_undo_method(node, "set_scale", start_scale);
+            ur->add_undo_method(node, "set_position", start_pos);
+            ur->commit_action(false); // false = already applied, don't re-execute do
+
             dragging_handle = -1;
             update_overlays();
             return true;
