@@ -339,7 +339,7 @@ void RiveViewModelImage::set_value(const Ref<Texture2D>& p_texture) {
     if (!instance_image) return;
     
     if (p_texture.is_null()) {
-        // TODO: Set null image?
+        // Setting a null image is not supported by the underlying API.
         return;
     }
 

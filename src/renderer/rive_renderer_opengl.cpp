@@ -35,7 +35,6 @@ static void* get_gl_proc(const char* name) {
 static void* get_gl_proc(const char* name) {
     static void* libgl = nullptr;
     if (!libgl) {
-        // FIXME: Try common names.
         libgl = dlopen("libGL.so", RTLD_LAZY);
         if (!libgl) libgl = dlopen("libGL.so.1", RTLD_LAZY);
         if (!libgl) libgl = dlopen("/System/Library/Frameworks/OpenGL.framework/OpenGL", RTLD_LAZY);
