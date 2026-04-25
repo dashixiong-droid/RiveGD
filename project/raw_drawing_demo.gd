@@ -8,6 +8,7 @@ extends Node
 
 @export var canvas_size: Vector2 = Vector2(1920, 1080)
 @export var image_texture: Texture2D
+@export_file("*.ttf", "*.otf", "*.ttc") var font_path: String = ""
 
 var _time: float = 0.0
 
@@ -52,6 +53,18 @@ const MESH_SIZE := 280.0
 var _mesh_verts: PackedVector2Array
 var _mesh_uvs: PackedVector2Array
 var _mesh_indices: PackedInt32Array
+
+# RawText showcase
+var _font: RiveFont
+var _text_paint_a: RivePaint
+var _text_paint_b: RivePaint
+var _text_grad: RiveGradient
+var _glyph_paths: Array = []   # Array of Dictionary {path, x, y, advance}
+var _glyph_total_w: float = 0.0
+var _wave_amplitude: float = 22.0
+var _wave_frequency: float = 1.6
+var _wave_phase: float = 0.0
+var _text_failed: bool = false
 
 
 func _ensure_resources() -> void:
@@ -169,6 +182,43 @@ func _ensure_resources() -> void:
 		_bbox_paint.set_thickness(4.0)
 		_bbox_path = RivePath.new()
 
+	if _font == null and not _text_failed:
+		_font = RiveFont.new()
+		var ok := false
+		if font_path != "":
+			ok = _font.load_from_file(font_path)
+		if not ok:
+			# Common macOS fallback fonts.
+			for p in ["/System/Library/Fonts/Helvetica.ttc",
+					   "/System/Library/Fonts/Supplemental/Arial.ttf",
+					   "/Library/Fonts/Arial.ttf"]:
+				if _font.load_from_file(p):
+					ok = true
+					break
+		if not ok:
+			push_warning("[demo] no font available, skipping section 10")
+			_font = null
+			_text_failed = true
+		else:
+			_text_grad = RiveGradient.new()
+			_text_grad.set_linear(Vector2(0, -60), Vector2(0, 60))
+			_text_grad.set_stops(
+				PackedColorArray([Color(1.0, 0.4, 0.7, 1.0), Color(0.4, 0.7, 1.0, 1.0)]),
+				PackedFloat32Array([0.0, 1.0])
+			)
+			_text_paint_a = RivePaint.new()
+			_text_paint_a.set_style(1)
+			_text_paint_a.set_gradient(_text_grad)
+			_text_paint_b = RivePaint.new()
+			_text_paint_b.set_style(0)
+			_text_paint_b.set_color(Color(0.1, 0.1, 0.15, 1.0))
+			_text_paint_b.set_thickness(2.0)
+			_text_paint_b.set_join(2)
+			_glyph_paths = _font.shape_text("Rive Wavy Text!", 96.0)
+			if _glyph_paths.size() > 0:
+				var last = _glyph_paths[_glyph_paths.size() - 1]
+				_glyph_total_w = float(last["x"]) + float(last["advance"])
+
 
 func _on_draw_rive(renderer: RiveRendererWrapper) -> void:
 	_ensure_resources()
@@ -237,6 +287,20 @@ func _on_draw_rive(renderer: RiveRendererWrapper) -> void:
 		renderer.save()
 		renderer.translate(canvas_size.x * 0.5, 220)
 		renderer.draw_image_mesh(_rive_image, _mesh_verts, _mesh_uvs, _mesh_indices, 1.0, 3)
+		renderer.restore()
+
+	# 10) Per-glyph path warp (Rive PathEffect-style wave).
+	if _glyph_paths.size() > 0:
+		renderer.save()
+		renderer.translate(canvas_size.x * 0.5 - _glyph_total_w * 0.5, canvas_size.y * 0.5 + 280)
+		# Bind shared sampler for the wave.
+		_wave_phase = _time * 2.5
+		var warp := Callable(self, "_wave_warp")
+		for entry in _glyph_paths:
+			var src : RivePath = entry["path"]
+			var warped := src.morph(warp)
+			renderer.draw_path(warped, _text_paint_a)
+			renderer.draw_path(warped, _text_paint_b)
 		renderer.restore()
 
 	# 8) add_poly + get_bounds: animated polygon with its bounding box overlay.
@@ -360,3 +424,14 @@ func _rebuild_mesh() -> void:
 			x += 18.0 * sin(t * 2.0 + v * TAU)
 			y += 18.0 * cos(t * 2.0 + u * TAU)
 			_mesh_verts[j * n + i] = Vector2(x, y)
+
+
+func _wave_warp(p: Vector2) -> Vector2:
+	# Sine warp on Y as a function of X. Path-effect style.
+	if _glyph_total_w == 0.0:
+		return p
+	var nx : float = p.x / _glyph_total_w
+	var angle : float = nx * _wave_frequency * TAU + _wave_phase
+	var primary : float = sin(angle) * _wave_amplitude
+	var secondary : float = sin(angle * 2.0) * (_wave_amplitude * 0.3)
+	return Vector2(p.x, p.y + primary + secondary)

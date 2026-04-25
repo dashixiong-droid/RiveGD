@@ -2,11 +2,16 @@
 #include "rive/math/raw_path.hpp"
 #include "rive/math/aabb.hpp"
 #include "rive/shapes/paint/image_sampler.hpp"
+#include "rive/text/raw_text.hpp"
+#include "rive/text/font_hb.hpp"
+#include "rive/text_engine.hpp"
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 #include <godot_cpp/classes/image.hpp>
+#include <godot_cpp/classes/file_access.hpp>
 #include <cmath>
 #include <vector>
+#include <string>
 
 using namespace godot;
 
@@ -33,6 +38,7 @@ void RivePath::_bind_methods() {
     ClassDB::bind_method(D_METHOD("add_poly", "points", "closed"), &RivePath::add_poly);
     ClassDB::bind_method(D_METHOD("get_bounds"), &RivePath::get_bounds);
     ClassDB::bind_method(D_METHOD("is_empty"), &RivePath::is_empty);
+    ClassDB::bind_method(D_METHOD("morph", "proc"), &RivePath::morph);
     ClassDB::bind_method(D_METHOD("set_fill_rule", "rule"), &RivePath::set_fill_rule);
     ClassDB::bind_method(D_METHOD("parse_svg", "path_data"), &RivePath::parse_svg);
 }
@@ -172,6 +178,54 @@ Rect2 RivePath::get_bounds() const {
 
 bool RivePath::is_empty() const {
     return !raw_path || raw_path->empty();
+}
+
+Ref<RivePath> RivePath::morph(Callable proc) const {
+    Ref<RivePath> out;
+    out.instantiate();
+    if (!raw_path || !proc.is_valid()) return out;
+    auto warp = [&](const rive::Vec2D& p) -> rive::Vec2D {
+        Variant v = proc.call(Vector2(p.x, p.y));
+        if (v.get_type() == Variant::VECTOR2) {
+            Vector2 r = v;
+            return {r.x, r.y};
+        }
+        return p;
+    };
+    for (auto iter = raw_path->begin(); iter != raw_path->end(); ++iter) {
+        rive::PathVerb verb = iter.verb();
+        const rive::Vec2D* p = iter.pts();
+        switch (verb) {
+            case rive::PathVerb::move: {
+                auto a = warp(p[0]);
+                out->raw_path->moveTo(a.x, a.y);
+                break;
+            }
+            case rive::PathVerb::line: {
+                auto a = warp(p[1]);
+                out->raw_path->lineTo(a.x, a.y);
+                break;
+            }
+            case rive::PathVerb::quad: {
+                auto a = warp(p[1]);
+                auto b = warp(p[2]);
+                out->raw_path->quadTo(a.x, a.y, b.x, b.y);
+                break;
+            }
+            case rive::PathVerb::cubic: {
+                auto a = warp(p[1]);
+                auto b = warp(p[2]);
+                auto c = warp(p[3]);
+                out->raw_path->cubicTo(a.x, a.y, b.x, b.y, c.x, c.y);
+                break;
+            }
+            case rive::PathVerb::close:
+                out->raw_path->close();
+                break;
+        }
+    }
+    out->is_dirty = true;
+    return out;
 }
 
 void RivePath::set_fill_rule(int rule) {
@@ -944,3 +998,238 @@ rive::rcp<rive::RenderShader> RiveGradient::get_shader_rcp(rive::Factory* factor
 rive::RenderShader* RiveGradient::get_shader(rive::Factory* factory) {
     return get_shader_rcp(factory).get();
 }
+
+// --- RiveFont ---
+
+void RiveFont::_bind_methods() {
+    ClassDB::bind_method(D_METHOD("load_from_buffer", "bytes"), &RiveFont::load_from_buffer);
+    ClassDB::bind_method(D_METHOD("load_from_file", "path"), &RiveFont::load_from_file);
+    ClassDB::bind_method(D_METHOD("is_loaded"), &RiveFont::is_loaded);
+    ClassDB::bind_method(D_METHOD("get_weight"), &RiveFont::get_weight);
+    ClassDB::bind_method(D_METHOD("is_italic"), &RiveFont::is_italic);
+    ClassDB::bind_method(D_METHOD("shape_text", "text", "size"), &RiveFont::shape_text);
+}
+
+bool RiveFont::load_from_buffer(PackedByteArray bytes) {
+    if (bytes.size() == 0) return false;
+    rive::Span<const uint8_t> span(bytes.ptr(), bytes.size());
+    font = HBFont::Decode(span);
+    if (!font) {
+        UtilityFunctions::push_warning("RiveFont.load_from_buffer: HBFont::Decode returned null.");
+        return false;
+    }
+    return true;
+}
+
+bool RiveFont::load_from_file(String path) {
+    Ref<FileAccess> f = FileAccess::open(path, FileAccess::READ);
+    if (f.is_null()) {
+        UtilityFunctions::push_warning("RiveFont.load_from_file: cannot open " + path);
+        return false;
+    }
+    PackedByteArray bytes = f->get_buffer(f->get_length());
+    return load_from_buffer(bytes);
+}
+
+int RiveFont::get_weight() const {
+    return font ? (int)font->getWeight() : 0;
+}
+
+bool RiveFont::is_italic() const {
+    return font ? font->isItalic() : false;
+}
+
+Array RiveFont::shape_text(String text, float size) {
+    Array out;
+    if (!font || text.length() == 0 || size <= 0.0f) return out;
+
+    // Convert Godot UTF-32 String to a vector of Unichar.
+    std::vector<rive::Unichar> unichars;
+    unichars.reserve(text.length());
+    for (int i = 0; i < text.length(); i++) {
+        unichars.push_back((rive::Unichar)text[i]);
+    }
+
+    // Single-run shaping with this font/size.
+    rive::TextRun run;
+    run.font = font;
+    run.size = size;
+    run.lineHeight = -1.0f;
+    run.letterSpacing = 0.0f;
+    run.unicharCount = (uint32_t)unichars.size();
+    run.script = 0;
+    run.styleId = 0;
+    run.level = 0;
+
+    rive::TextRun runs[1] = { run };
+    rive::SimpleArray<rive::Paragraph> paragraphs = font->shapeText(
+        rive::Span<const rive::Unichar>(unichars.data(), unichars.size()),
+        rive::Span<const rive::TextRun>(runs, 1));
+
+    for (size_t pi = 0; pi < paragraphs.size(); pi++) {
+        const rive::Paragraph& para = paragraphs[pi];
+        for (size_t ri = 0; ri < para.runs.size(); ri++) {
+            const rive::GlyphRun& gr = para.runs[ri];
+            for (size_t gi = 0; gi < gr.glyphs.size(); gi++) {
+                rive::GlyphID gid = gr.glyphs[gi];
+                rive::RawPath glyph_path = gr.font->getPath(gid);
+                // Glyph path is at 1pt; scale to requested size and apply
+                // baseline x offset (xpos[gi]) + per-glyph offset.
+                float gx = gr.xpos[gi] + gr.offsets[gi].x;
+                float gy = gr.offsets[gi].y;
+                Ref<RivePath> rp;
+                rp.instantiate();
+                for (auto it = glyph_path.begin(); it != glyph_path.end(); ++it) {
+                    rive::PathVerb verb = it.verb();
+                    const rive::Vec2D* p = it.pts();
+                    auto tx = [&](const rive::Vec2D& v) -> rive::Vec2D {
+                        return { v.x * size + gx, v.y * size + gy };
+                    };
+                    switch (verb) {
+                        case rive::PathVerb::move: {
+                            auto a = tx(p[0]);
+                            rp->move_to(a.x, a.y);
+                            break;
+                        }
+                        case rive::PathVerb::line: {
+                            auto a = tx(p[1]);
+                            rp->line_to(a.x, a.y);
+                            break;
+                        }
+                        case rive::PathVerb::quad: {
+                            auto a = tx(p[1]);
+                            auto b = tx(p[2]);
+                            rp->quad_to(a.x, a.y, b.x, b.y);
+                            break;
+                        }
+                        case rive::PathVerb::cubic: {
+                            auto a = tx(p[1]);
+                            auto b = tx(p[2]);
+                            auto c = tx(p[3]);
+                            rp->cubic_to(a.x, a.y, b.x, b.y, c.x, c.y);
+                            break;
+                        }
+                        case rive::PathVerb::close:
+                            rp->close();
+                            break;
+                    }
+                }
+                Dictionary entry;
+                entry["path"] = rp;
+                entry["x"] = gx;
+                entry["y"] = gy;
+                entry["advance"] = gi + 1 < gr.xpos.size() ? (gr.xpos[gi + 1] - gr.xpos[gi]) : 0.0f;
+                entry["glyph_id"] = (int)gid;
+                out.push_back(entry);
+            }
+        }
+    }
+    return out;
+}
+
+// --- RiveText ---
+
+void RiveText::_bind_methods() {
+    ClassDB::bind_method(D_METHOD("clear"), &RiveText::clear);
+    ClassDB::bind_method(D_METHOD("append_run", "text", "font", "paint", "size", "line_height", "letter_spacing"), &RiveText::append_run);
+    ClassDB::bind_method(D_METHOD("render", "renderer", "override_paint"), &RiveText::render);
+    ClassDB::bind_method(D_METHOD("get_bounds"), &RiveText::get_bounds);
+    ClassDB::bind_method(D_METHOD("set_sizing", "v"), &RiveText::set_sizing);
+    ClassDB::bind_method(D_METHOD("set_overflow", "v"), &RiveText::set_overflow);
+    ClassDB::bind_method(D_METHOD("set_align", "v"), &RiveText::set_align);
+    ClassDB::bind_method(D_METHOD("set_max_width", "v"), &RiveText::set_max_width);
+    ClassDB::bind_method(D_METHOD("set_max_height", "v"), &RiveText::set_max_height);
+    ClassDB::bind_method(D_METHOD("set_paragraph_spacing", "v"), &RiveText::set_paragraph_spacing);
+    ClassDB::bind_method(D_METHOD("get_sizing"), &RiveText::get_sizing);
+    ClassDB::bind_method(D_METHOD("get_overflow"), &RiveText::get_overflow);
+    ClassDB::bind_method(D_METHOD("get_align"), &RiveText::get_align);
+    ClassDB::bind_method(D_METHOD("get_max_width"), &RiveText::get_max_width);
+    ClassDB::bind_method(D_METHOD("get_max_height"), &RiveText::get_max_height);
+    ClassDB::bind_method(D_METHOD("get_paragraph_spacing"), &RiveText::get_paragraph_spacing);
+}
+
+RiveText::RiveText() {}
+RiveText::~RiveText() {}
+
+void RiveText::_ensure_raw_text() {
+    if (!raw_text) {
+        rive::Factory* factory = RiveRenderRegistry::get_singleton()->get_factory();
+        if (factory) {
+            raw_text = std::make_unique<rive::RawText>(factory);
+            _apply_props();
+        }
+    }
+}
+
+void RiveText::_apply_props() {
+    if (!raw_text) return;
+    raw_text->sizing((rive::TextSizing)sizing);
+    raw_text->overflow((rive::TextOverflow)overflow);
+    raw_text->align((rive::TextAlign)align);
+    raw_text->maxWidth(max_width);
+    raw_text->maxHeight(max_height);
+    raw_text->paragraphSpacing(paragraph_spacing);
+}
+
+void RiveText::clear() {
+    _ensure_raw_text();
+    if (raw_text) raw_text->clear();
+    run_paints.clear();
+    run_fonts.clear();
+}
+
+void RiveText::append_run(String text, Ref<RiveFont> p_font, Ref<RivePaint> p_paint, float size, float line_height, float letter_spacing) {
+    _ensure_raw_text();
+    if (!raw_text) {
+        UtilityFunctions::push_warning("RiveText.append_run: factory not ready.");
+        return;
+    }
+    if (p_font.is_null() || !p_font->is_loaded()) {
+        UtilityFunctions::push_warning("RiveText.append_run: font is null or not loaded.");
+        return;
+    }
+    rive::rcp<rive::RenderPaint> paint_rcp;
+    rive::Factory* factory = RiveRenderRegistry::get_singleton()->get_factory();
+    if (p_paint.is_valid()) {
+        // Borrow the paint's RenderPaint via an rcp that does NOT take ownership of the Godot ref.
+        // Easiest: keep p_paint alive in run_paints, and create an rcp wrapping its render paint
+        // by ref'ing it.
+        rive::RenderPaint* rp = p_paint->get_render_paint(factory);
+        if (rp) {
+            // safe_rcp() pattern: ref then construct rcp.
+            rp->ref();
+            paint_rcp = rive::rcp<rive::RenderPaint>(rp);
+        }
+    }
+    std::string std_text = std::string(text.utf8().get_data());
+    raw_text->append(std_text, paint_rcp, p_font->get_font(), size, line_height, letter_spacing);
+    run_fonts.push_back(p_font);
+    if (p_paint.is_valid()) run_paints.push_back(p_paint);
+}
+
+void RiveText::render(Ref<RiveRendererWrapper> renderer, Ref<RivePaint> override_paint) {
+    if (!raw_text || renderer.is_null() || !renderer->get_renderer()) return;
+    rive::rcp<rive::RenderPaint> override_rcp;
+    if (override_paint.is_valid()) {
+        rive::Factory* factory = RiveRenderRegistry::get_singleton()->get_factory();
+        rive::RenderPaint* rp = override_paint->get_render_paint(factory);
+        if (rp) {
+            rp->ref();
+            override_rcp = rive::rcp<rive::RenderPaint>(rp);
+        }
+    }
+    raw_text->render(renderer->get_renderer(), override_rcp);
+}
+
+Rect2 RiveText::get_bounds() {
+    if (!raw_text) return Rect2();
+    rive::AABB b = raw_text->bounds();
+    return Rect2(b.minX, b.minY, b.maxX - b.minX, b.maxY - b.minY);
+}
+
+void RiveText::set_sizing(int v)            { sizing = v; _ensure_raw_text(); if (raw_text) raw_text->sizing((rive::TextSizing)v); }
+void RiveText::set_overflow(int v)          { overflow = v; _ensure_raw_text(); if (raw_text) raw_text->overflow((rive::TextOverflow)v); }
+void RiveText::set_align(int v)             { align = v; _ensure_raw_text(); if (raw_text) raw_text->align((rive::TextAlign)v); }
+void RiveText::set_max_width(float v)       { max_width = v; _ensure_raw_text(); if (raw_text) raw_text->maxWidth(v); }
+void RiveText::set_max_height(float v)      { max_height = v; _ensure_raw_text(); if (raw_text) raw_text->maxHeight(v); }
+void RiveText::set_paragraph_spacing(float v){ paragraph_spacing = v; _ensure_raw_text(); if (raw_text) raw_text->paragraphSpacing(v); }

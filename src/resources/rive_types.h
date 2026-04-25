@@ -47,6 +47,7 @@ public:
     void add_poly(PackedVector2Array points, bool closed);
     Rect2 get_bounds() const;
     bool is_empty() const;
+    Ref<RivePath> morph(Callable proc) const;
     void set_fill_rule(int rule);
     
     void parse_svg(String path_data);
@@ -164,6 +165,75 @@ public:
     bool is_loaded() const { return render_image.get() != nullptr; }
 
     rive::RenderImage* get_render_image() const { return render_image.get(); }
+};
+
+namespace rive {
+    class Font;
+    class RawText;
+}
+
+class RiveFont : public RefCounted {
+    GDCLASS(RiveFont, RefCounted);
+
+private:
+    rive::rcp<rive::Font> font;
+
+protected:
+    static void _bind_methods();
+
+public:
+    bool load_from_buffer(PackedByteArray bytes);
+    bool load_from_file(String path);
+    bool is_loaded() const { return font.get() != nullptr; }
+    int get_weight() const;
+    bool is_italic() const;
+    Array shape_text(String text, float size);
+    rive::rcp<rive::Font> get_font() const { return font; }
+};
+
+class RiveText : public RefCounted {
+    GDCLASS(RiveText, RefCounted);
+
+private:
+    std::unique_ptr<rive::RawText> raw_text;
+    // Hold refs so paints/fonts stay alive across frames.
+    Vector<Ref<RivePaint>> run_paints;
+    Vector<Ref<RiveFont>> run_fonts;
+    int sizing = 0;       // autoWidth / autoHeight / fixed
+    int overflow = 0;     // visible / hidden / clipped / ellipsis / fit
+    int align = 0;        // left / right / center
+    float max_width = 0.0f;
+    float max_height = 0.0f;
+    float paragraph_spacing = 0.0f;
+    bool dirty = true;
+
+    void _ensure_raw_text();
+    void _apply_props();
+
+protected:
+    static void _bind_methods();
+
+public:
+    RiveText();
+    ~RiveText();
+
+    void clear();
+    void append_run(String text, Ref<RiveFont> font, Ref<RivePaint> paint, float size, float line_height, float letter_spacing);
+    void render(Ref<RiveRendererWrapper> renderer, Ref<RivePaint> override_paint);
+    Rect2 get_bounds();
+
+    void set_sizing(int v);
+    void set_overflow(int v);
+    void set_align(int v);
+    void set_max_width(float v);
+    void set_max_height(float v);
+    void set_paragraph_spacing(float v);
+    int get_sizing() const { return sizing; }
+    int get_overflow() const { return overflow; }
+    int get_align() const { return align; }
+    float get_max_width() const { return max_width; }
+    float get_max_height() const { return max_height; }
+    float get_paragraph_spacing() const { return paragraph_spacing; }
 };
 
 #endif
