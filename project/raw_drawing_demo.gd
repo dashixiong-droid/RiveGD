@@ -39,6 +39,13 @@ var _composite_path: RivePath
 var _composite_fill: RivePaint
 var _rive_image: RiveImage
 
+# add_poly + bounds showcase
+var _poly_path: RivePath
+var _poly_fill: RivePaint
+var _poly_stroke: RivePaint
+var _bbox_paint: RivePaint
+var _bbox_path: RivePath
+
 
 func _ensure_resources() -> void:
 	if _bg_paint == null:
@@ -139,6 +146,22 @@ func _ensure_resources() -> void:
 		if not _rive_image.load_from_texture(image_texture):
 			_rive_image = null
 
+	if _poly_path == null:
+		_poly_path = RivePath.new()
+		_poly_fill = RivePaint.new()
+		_poly_fill.set_style(1)
+		_poly_fill.set_color(Color(0.55, 0.7, 1.0, 0.55))
+		_poly_stroke = RivePaint.new()
+		_poly_stroke.set_style(0)
+		_poly_stroke.set_color(Color(0.7, 0.85, 1.0, 1.0))
+		_poly_stroke.set_thickness(3.0)
+		_poly_stroke.set_join(2)
+		_bbox_paint = RivePaint.new()
+		_bbox_paint.set_style(0)
+		_bbox_paint.set_color(Color(1.0, 1.0, 0.3, 0.95))
+		_bbox_paint.set_thickness(4.0)
+		_bbox_path = RivePath.new()
+
 
 func _on_draw_rive(renderer: RiveRendererWrapper) -> void:
 	_ensure_resources()
@@ -201,6 +224,20 @@ func _on_draw_rive(renderer: RiveRendererWrapper) -> void:
 		renderer.draw_image(_rive_image, 1.0, 3) # 3 = SrcOver
 		renderer.restore()
 
+	# 8) add_poly + get_bounds: animated polygon with its bounding box overlay.
+	_rebuild_poly_path()
+	renderer.save()
+	renderer.translate(canvas_size.x * 0.5, canvas_size.y - 220)
+	# IMPORTANT: read bounds BEFORE drawing — drawing consumes raw_path internally.
+	var bb := _poly_path.get_bounds()
+	renderer.draw_path(_poly_path, _poly_fill)
+	renderer.draw_path(_poly_path, _poly_stroke)
+	if bb.size.x > 0 and bb.size.y > 0:
+		_bbox_path.reset()
+		_bbox_path.add_rect(bb.position.x, bb.position.y, bb.size.x, bb.size.y)
+		renderer.draw_path(_bbox_path, _bbox_paint)
+	renderer.restore()
+
 
 func _rebuild_blob_path() -> void:
 	_blob_path.reset()
@@ -254,3 +291,18 @@ func _rebuild_clip_path() -> void:
 	var w := pulse * 1.6
 	var h := pulse
 	_clip_path.add_oval(-w, -h, w * 2.0, h * 2.0)
+
+
+func _rebuild_poly_path() -> void:
+	_poly_path.reset()
+	var n := 9
+	var r0 := 70.0
+	var r1 := 140.0
+	var t := _time * 0.8
+	var pts := PackedVector2Array()
+	for i in range(n * 2):
+		var a : float = (TAU * i) / float(n * 2) - PI * 0.5
+		var r : float = r0 if (i % 2) == 0 else r1
+		r += 12.0 * sin(t * 2.0 + a * 3.0)
+		pts.push_back(Vector2(cos(a) * r, sin(a) * r))
+	_poly_path.add_poly(pts, true)

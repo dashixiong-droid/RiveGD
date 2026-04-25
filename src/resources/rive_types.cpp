@@ -29,6 +29,10 @@ void RivePath::_bind_methods() {
     ClassDB::bind_method(D_METHOD("add_oval", "x", "y", "w", "h"), &RivePath::add_oval);
     ClassDB::bind_method(D_METHOD("add_circle", "cx", "cy", "radius"), &RivePath::add_circle);
     ClassDB::bind_method(D_METHOD("add_path", "other"), &RivePath::add_path);
+    ClassDB::bind_method(D_METHOD("add_path_transformed", "other", "xform"), &RivePath::add_path_transformed);
+    ClassDB::bind_method(D_METHOD("add_poly", "points", "closed"), &RivePath::add_poly);
+    ClassDB::bind_method(D_METHOD("get_bounds"), &RivePath::get_bounds);
+    ClassDB::bind_method(D_METHOD("is_empty"), &RivePath::is_empty);
     ClassDB::bind_method(D_METHOD("set_fill_rule", "rule"), &RivePath::set_fill_rule);
     ClassDB::bind_method(D_METHOD("parse_svg", "path_data"), &RivePath::parse_svg);
 }
@@ -104,6 +108,70 @@ void RivePath::add_path(Ref<RivePath> other) {
         }
     }
     is_dirty = true;
+}
+
+void RivePath::add_path_transformed(Ref<RivePath> other, Transform2D xform) {
+    if (other.is_null() || other.ptr() == this) return;
+    const rive::RawPath* src = other->raw_path.get();
+    if (!src) return;
+    auto tx = [&](float x, float y) -> rive::Vec2D {
+        Vector2 v = xform.xform(Vector2(x, y));
+        return {v.x, v.y};
+    };
+    for (auto iter = src->begin(); iter != src->end(); ++iter) {
+        rive::PathVerb verb = iter.verb();
+        const rive::Vec2D* p = iter.pts();
+        switch (verb) {
+            case rive::PathVerb::move: {
+                auto v = tx(p[0].x, p[0].y);
+                raw_path->moveTo(v.x, v.y);
+                break;
+            }
+            case rive::PathVerb::line: {
+                auto v = tx(p[1].x, p[1].y);
+                raw_path->lineTo(v.x, v.y);
+                break;
+            }
+            case rive::PathVerb::quad: {
+                auto a = tx(p[1].x, p[1].y);
+                auto b = tx(p[2].x, p[2].y);
+                raw_path->quadTo(a.x, a.y, b.x, b.y);
+                break;
+            }
+            case rive::PathVerb::cubic: {
+                auto a = tx(p[1].x, p[1].y);
+                auto b = tx(p[2].x, p[2].y);
+                auto c = tx(p[3].x, p[3].y);
+                raw_path->cubicTo(a.x, a.y, b.x, b.y, c.x, c.y);
+                break;
+            }
+            case rive::PathVerb::close:
+                raw_path->close();
+                break;
+        }
+    }
+    is_dirty = true;
+}
+
+void RivePath::add_poly(PackedVector2Array points, bool closed) {
+    int n = points.size();
+    if (n < 2) return;
+    raw_path->moveTo(points[0].x, points[0].y);
+    for (int k = 1; k < n; k++) {
+        raw_path->lineTo(points[k].x, points[k].y);
+    }
+    if (closed) raw_path->close();
+    is_dirty = true;
+}
+
+Rect2 RivePath::get_bounds() const {
+    if (!raw_path || raw_path->empty()) return Rect2();
+    rive::AABB b = raw_path->bounds();
+    return Rect2(b.minX, b.minY, b.maxX - b.minX, b.maxY - b.minY);
+}
+
+bool RivePath::is_empty() const {
+    return !raw_path || raw_path->empty();
 }
 
 void RivePath::set_fill_rule(int rule) {
@@ -496,7 +564,12 @@ void RivePath::parse_svg(String path_data) {
 rive::RenderPath* RivePath::get_render_path(rive::Factory* factory) {
     if (is_dirty || !render_path) {
         if (factory) {
-            render_path = factory->makeRenderPath(*raw_path, (rive::FillRule)fill_rule);
+            // makeRenderPath swaps the contents of the supplied RawPath into the
+            // resulting RenderPath, leaving our raw_path empty. Pass a copy so
+            // we can keep mutating / inspecting raw_path (e.g. via get_bounds,
+            // is_empty, add_path, parse_svg) after this call.
+            rive::RawPath copy = *raw_path;
+            render_path = factory->makeRenderPath(copy, (rive::FillRule)fill_rule);
             is_dirty = false;
         }
     }
@@ -649,6 +722,7 @@ void RiveRendererWrapper::_bind_methods() {
     ClassDB::bind_method(D_METHOD("draw_path", "path", "paint"), &RiveRendererWrapper::draw_path);
     ClassDB::bind_method(D_METHOD("clip_path", "path"), &RiveRendererWrapper::clip_path);
     ClassDB::bind_method(D_METHOD("draw_image", "image", "opacity", "blend_mode"), &RiveRendererWrapper::draw_image);
+    ClassDB::bind_method(D_METHOD("draw_image_mesh", "image", "vertices", "uvs", "indices", "opacity", "blend_mode"), &RiveRendererWrapper::draw_image_mesh);
 }
 
 void RiveRendererWrapper::save() {
@@ -700,6 +774,78 @@ void RiveRendererWrapper::draw_image(Ref<RiveImage> image, float opacity, int bl
                             (rive::BlendMode)blend_mode,
                             opacity);
     }
+}
+
+void RiveRendererWrapper::draw_image_mesh(Ref<RiveImage> image,
+                                          PackedVector2Array vertices,
+                                          PackedVector2Array uvs,
+                                          PackedInt32Array indices,
+                                          float opacity,
+                                          int blend_mode) {
+    if (!renderer || image.is_null() || !image->is_loaded()) return;
+    int vcount = vertices.size();
+    int icount = indices.size();
+    if (vcount == 0 || icount == 0 || uvs.size() != vcount) {
+        UtilityFunctions::push_warning("RiveRendererWrapper.draw_image_mesh: invalid vertex/uv/index counts.");
+        return;
+    }
+    if (vcount > 65535) {
+        UtilityFunctions::push_warning("RiveRendererWrapper.draw_image_mesh: vertex count exceeds uint16 limit.");
+        return;
+    }
+    rive::Factory* factory = RiveRenderRegistry::get_singleton()->get_factory();
+    if (!factory) return;
+
+    // Each Vector2 is two floats; sizeof(Vector2) == 8 bytes assumed.
+    size_t vert_bytes = (size_t)vcount * sizeof(float) * 2;
+    size_t idx_bytes = (size_t)icount * sizeof(uint16_t);
+
+    rive::rcp<rive::RenderBuffer> vb = factory->makeRenderBuffer(
+        rive::RenderBufferType::vertex,
+        rive::RenderBufferFlags::mappedOnceAtInitialization,
+        vert_bytes);
+    rive::rcp<rive::RenderBuffer> ub = factory->makeRenderBuffer(
+        rive::RenderBufferType::vertex,
+        rive::RenderBufferFlags::mappedOnceAtInitialization,
+        vert_bytes);
+    rive::rcp<rive::RenderBuffer> ib = factory->makeRenderBuffer(
+        rive::RenderBufferType::index,
+        rive::RenderBufferFlags::mappedOnceAtInitialization,
+        idx_bytes);
+    if (!vb || !ub || !ib) return;
+
+    if (void* vp = vb->map()) {
+        float* dst = (float*)vp;
+        for (int k = 0; k < vcount; k++) {
+            dst[k * 2 + 0] = vertices[k].x;
+            dst[k * 2 + 1] = vertices[k].y;
+        }
+        vb->unmap();
+    }
+    if (void* up = ub->map()) {
+        float* dst = (float*)up;
+        for (int k = 0; k < vcount; k++) {
+            dst[k * 2 + 0] = uvs[k].x;
+            dst[k * 2 + 1] = uvs[k].y;
+        }
+        ub->unmap();
+    }
+    if (void* ip = ib->map()) {
+        uint16_t* dst = (uint16_t*)ip;
+        for (int k = 0; k < icount; k++) {
+            int v = indices[k];
+            dst[k] = (uint16_t)(v < 0 ? 0 : (v > 65535 ? 65535 : v));
+        }
+        ib->unmap();
+    }
+
+    renderer->drawImageMesh(image->get_render_image(),
+                            rive::ImageSampler::LinearClamp(),
+                            vb, ub, ib,
+                            (uint32_t)vcount,
+                            (uint32_t)icount,
+                            (rive::BlendMode)blend_mode,
+                            opacity);
 }
 
 // --- RiveImage ---

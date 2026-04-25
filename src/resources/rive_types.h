@@ -43,6 +43,10 @@ public:
     void add_oval(float x, float y, float w, float h);
     void add_circle(float cx, float cy, float radius);
     void add_path(Ref<RivePath> other);
+    void add_path_transformed(Ref<RivePath> other, Transform2D xform);
+    void add_poly(PackedVector2Array points, bool closed);
+    Rect2 get_bounds() const;
+    bool is_empty() const;
     void set_fill_rule(int rule);
     
     void parse_svg(String path_data);
@@ -132,6 +136,12 @@ public:
     void draw_path(Ref<RivePath> path, Ref<RivePaint> paint);
     void clip_path(Ref<RivePath> path);
     void draw_image(Ref<class RiveImage> image, float opacity, int blend_mode);
+    void draw_image_mesh(Ref<class RiveImage> image,
+                         PackedVector2Array vertices,
+                         PackedVector2Array uvs,
+                         PackedInt32Array indices,
+                         float opacity,
+                         int blend_mode);
 };
 
 class RiveImage : public RefCounted {
