@@ -56,6 +56,16 @@ public:
     // Hit testing
     bool hit_test(Vector2 point);
     
+    
+    // Editor integration
+    Rect2 _edit_get_rect() const;
+    bool _edit_use_rect() const;
+    Rect2 get_rect() const;
+    
+    // Godot overrides
+    void _draw() override;
+    void _input(const Ref<InputEvent> &p_event) override;
+    
     // Input handling
     void pointer_down(Vector2 position) override;
     void pointer_up(Vector2 position) override;

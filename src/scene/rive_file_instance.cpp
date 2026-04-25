@@ -1,6 +1,9 @@
 #include "rive_file_instance.h"
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
+#include <godot_cpp/classes/engine.hpp>
+#include <godot_cpp/classes/input_event_mouse_button.hpp>
+#include <godot_cpp/classes/input_event_mouse_motion.hpp>
 
 void RiveFileInstance::_bind_methods() {
     ClassDB::bind_method(D_METHOD("set_rive_file", "file"), &RiveFileInstance::set_rive_file);
@@ -17,6 +20,12 @@ void RiveFileInstance::_bind_methods() {
     
     ClassDB::bind_method(D_METHOD("set_auto_play", "auto_play"), &RiveFileInstance::set_auto_play);
     ClassDB::bind_method(D_METHOD("get_auto_play"), &RiveFileInstance::get_auto_play);
+    
+    ClassDB::bind_method(D_METHOD("_input", "event"), &RiveFileInstance::_input);
+    
+    ClassDB::bind_method(D_METHOD("get_rect"), &RiveFileInstance::get_rect);
+    ClassDB::bind_method(D_METHOD("_edit_get_rect"), &RiveFileInstance::_edit_get_rect);
+    ClassDB::bind_method(D_METHOD("_edit_use_rect"), &RiveFileInstance::_edit_use_rect);
 
     ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "rive_file", PROPERTY_HINT_RESOURCE_TYPE, "RiveFile"), "set_rive_file", "get_rive_file");
     ADD_PROPERTY(PropertyInfo(Variant::STRING, "artboard_name"), "set_artboard_name", "get_artboard_name");
@@ -153,6 +162,46 @@ void RiveFileInstance::draw(rive::Renderer *renderer) {
     renderer->restore();
 }
 
+void RiveFileInstance::_draw() {
+    if (Engine::get_singleton()->is_editor_hint()) {
+        draw_rect(get_rect(), Color(1, 1, 1, 0.01)); // Almost transparent for selection
+    }
+}
+
+void RiveFileInstance::_input(const Ref<InputEvent> &p_event) {
+    Ref<InputEventMouseButton> mb = p_event;
+    if (mb.is_valid()) {
+        if (mb->is_pressed()) {
+            pointer_down(mb->get_position());
+        } else {
+            pointer_up(mb->get_position());
+        }
+        return;
+    }
+
+    Ref<InputEventMouseMotion> mm = p_event;
+    if (mm.is_valid()) {
+        pointer_move(mm->get_position());
+    }
+}
+
+Rect2 RiveFileInstance::_edit_get_rect() const {
+    return get_rect();
+}
+
+bool RiveFileInstance::_edit_use_rect() const {
+    return true;
+}
+
+Rect2 RiveFileInstance::get_rect() const {
+    if (artboard) {
+        rive::AABB bounds = artboard->bounds();
+        return Rect2(bounds.minX, bounds.minY, bounds.width(), bounds.height());
+    }
+    // Return a default rect so it can be selected in editor even without a file
+    return Rect2(-32, -32, 64, 64);
+}
+
 bool RiveFileInstance::hit_test(Vector2 point) {
     // Point is in parent space (CanvasLayer space)
     // We need to transform it to local space?
@@ -171,25 +220,22 @@ bool RiveFileInstance::hit_test(Vector2 point) {
 
 void RiveFileInstance::pointer_down(Vector2 position) {
     if (state_machine) {
-        // Transform position to local space
-        Transform2D inv = get_transform().affine_inverse();
-        Vector2 local = inv.xform(position);
+        // Transform position (Global) to local space
+        Vector2 local = to_local(position);
         state_machine->pointerDown(rive::Vec2D(local.x, local.y));
     }
 }
 
 void RiveFileInstance::pointer_up(Vector2 position) {
     if (state_machine) {
-        Transform2D inv = get_transform().affine_inverse();
-        Vector2 local = inv.xform(position);
+        Vector2 local = to_local(position);
         state_machine->pointerUp(rive::Vec2D(local.x, local.y));
     }
 }
 
 void RiveFileInstance::pointer_move(Vector2 position) {
     if (state_machine) {
-        Transform2D inv = get_transform().affine_inverse();
-        Vector2 local = inv.xform(position);
+        Vector2 local = to_local(position);
         state_machine->pointerMove(rive::Vec2D(local.x, local.y));
     }
 }

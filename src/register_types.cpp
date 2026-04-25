@@ -15,6 +15,7 @@
 #include "scene/rive_canvas_2d.h"
 #include "scene/rive_raw.h"
 #include "editor/rive_editor_plugin.h"
+#include "editor/rive_file_instance_editor_plugin.h"
 #include <godot_cpp/classes/editor_plugin_registration.hpp>
 
 using namespace godot;
@@ -39,7 +40,10 @@ void initialize_rive_module(ModuleInitializationLevel p_level) {
     if (p_level == MODULE_INITIALIZATION_LEVEL_EDITOR) {
         ClassDB::register_class<RiveImportPlugin>();
         ClassDB::register_class<RiveEditorPlugin>();
+        ClassDB::register_class<RiveFileInstanceEditor>();
+        ClassDB::register_class<RiveFileInstanceEditorPlugin>();
         EditorPlugins::add_by_type<RiveEditorPlugin>();
+        EditorPlugins::add_by_type<RiveFileInstanceEditorPlugin>();
     }
 }
 
