@@ -30,17 +30,34 @@ class RiveFileInstanceEditorPlugin : public EditorPlugin {
 
     RiveFileInstanceEditor *rive_editor = nullptr;
 
+    // Handle interaction state
+    int dragging_handle = -1;
+    int hovering_handle = -1;
+
+    // Drag state (captured when drag begins)
+    Vector2 drag_anchor_parent; // anchor point in parent space, fixed during drag
+    Vector2 drag_start_scale;
+    Vector2 drag_start_pos;
+    Rect2 drag_start_rect;
+
+    static constexpr float HANDLE_HALF_SIZE = 5.0f;
+    static constexpr float HANDLE_HOVER_RADIUS = 8.0f;
+
+    Vector2 get_handle_viewport_pos(int idx, RiveFileInstance *node) const;
+    int get_hovered_handle(Vector2 vp_mouse, RiveFileInstance *node) const;
+    Transform2D get_viewport_to_parent_xform(RiveFileInstance *node) const;
+
 protected:
     static void _bind_methods();
 
 public:
     RiveFileInstanceEditorPlugin();
-    
+
     virtual String _get_plugin_name() const override { return "RiveFileInstance"; }
     virtual bool _handles(Object *p_object) const override;
     virtual void _make_visible(bool p_visible) override;
     virtual void _edit(Object *p_object) override;
-    
+
     virtual bool _forward_canvas_gui_input(const Ref<InputEvent> &p_event) override;
     virtual void _forward_canvas_draw_over_viewport(Control *p_overlay) override;
 };
