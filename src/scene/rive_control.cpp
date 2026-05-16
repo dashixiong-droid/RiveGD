@@ -27,6 +27,7 @@ void RiveControl::_bind_methods()
     ClassDB::bind_method(D_METHOD("set_rive_file", "file"), &RiveControl::set_rive_file);
     ClassDB::bind_method(D_METHOD("get_rive_file"), &RiveControl::get_rive_file);
     ClassDB::bind_method(D_METHOD("_on_rive_file_changed"), &RiveControl::_on_rive_file_changed);
+    ClassDB::bind_method(D_METHOD("_on_rive_event", "name", "properties", "delay"), &RiveControl::_on_rive_event);
 
     ClassDB::bind_method(D_METHOD("play_animation", "name"), &RiveControl::play_animation);
     ClassDB::bind_method(D_METHOD("play_state_machine", "name"), &RiveControl::play_state_machine);
@@ -48,6 +49,11 @@ void RiveControl::_bind_methods()
 
     ClassDB::bind_method(D_METHOD("set_property_values", "values"), &RiveControl::set_property_values);
     ClassDB::bind_method(D_METHOD("get_property_values"), &RiveControl::get_property_values);
+
+    ADD_SIGNAL(MethodInfo("rive_event",
+        PropertyInfo(Variant::STRING, "name"),
+        PropertyInfo(Variant::DICTIONARY, "properties"),
+        PropertyInfo(Variant::FLOAT, "delay")));
 
     ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "rive_file", PROPERTY_HINT_RESOURCE_TYPE, "RiveFile"), "set_rive_file", "get_rive_file");
     ADD_PROPERTY(PropertyInfo(Variant::STRING, "animation_name"), "set_animation_name", "get_animation_name");
@@ -156,6 +162,10 @@ void RiveControl::_on_rive_file_changed() {
     queue_redraw();
 }
 
+void RiveControl::_on_rive_event(const String &p_name, const Dictionary &p_properties, float p_delay) {
+    emit_signal("rive_event", p_name, p_properties, p_delay);
+}
+
 void RiveControl::load_file()
 {
     if (rive_file.is_null())
@@ -170,6 +180,10 @@ void RiveControl::load_file()
 
     if (rive_player.is_valid()) {
         if (rive_player->load_from_bytes(data, asset_path)) {
+            // Forward rive_event signals from the player
+            if (!rive_player->is_connected("rive_event", Callable(this, "_on_rive_event"))) {
+                rive_player->connect("rive_event", Callable(this, "_on_rive_event"));
+            }
             _apply_property_values();
             notify_property_list_changed();
             UtilityFunctions::print_verbose("Rive file loaded successfully.");

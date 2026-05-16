@@ -50,6 +50,7 @@ protected:
     rive::Mat2D _get_rive_transform() const;
     void _apply_property_values();
     void _on_rive_file_changed();
+    void _on_rive_event(const String &p_name, const Dictionary &p_properties, float p_delay);
 
 public:
     RiveControl();

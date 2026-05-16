@@ -4,8 +4,21 @@
 #include <godot_cpp/variant/utility_functions.hpp>
 #include <godot_cpp/core/class_db.hpp>
 
+#include <rive/event_report.hpp>
+#include <rive/custom_property.hpp>
+#include <rive/custom_property_string.hpp>
+#include <rive/custom_property_number.hpp>
+#include <rive/custom_property_boolean.hpp>
+#include <rive/custom_property_color.hpp>
+#include <rive/container_component.hpp>
+
 void RivePlayer::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_rive_view_model_instance"), &RivePlayer::get_rive_view_model_instance);
+
+    ADD_SIGNAL(MethodInfo("rive_event",
+        PropertyInfo(Variant::STRING, "name"),
+        PropertyInfo(Variant::DICTIONARY, "properties"),
+        PropertyInfo(Variant::FLOAT, "delay")));
 }
 
 RivePlayer::RivePlayer() {
@@ -120,6 +133,37 @@ void RivePlayer::advance(float delta) {
     if (artboard) {
         if (state_machine) {
             state_machine->advance(delta);
+
+            // Collect and emit reported events
+            size_t event_count = state_machine->reportedEventCount();
+            for (size_t i = 0; i < event_count; i++) {
+                const rive::EventReport report = state_machine->reportedEventAt(i);
+                rive::Event* event = report.event();
+                if (!event) continue;
+
+                String event_name = String(event->name().c_str());
+                Dictionary properties;
+
+                // Extract custom properties from the event
+                // Event inherits from ContainerComponent, CustomProperties are children
+                for (auto* child : event->children()) {
+                    auto* prop = child->as<rive::CustomProperty>();
+                    if (!prop) continue;
+                    String prop_name = String(prop->name().c_str());
+
+                    if (prop->is<rive::CustomPropertyString>()) {
+                        properties[prop_name] = String(prop->as<rive::CustomPropertyString>()->propertyValue().c_str());
+                    } else if (prop->is<rive::CustomPropertyNumber>()) {
+                        properties[prop_name] = prop->as<rive::CustomPropertyNumber>()->propertyValue();
+                    } else if (prop->is<rive::CustomPropertyBoolean>()) {
+                        properties[prop_name] = prop->as<rive::CustomPropertyBoolean>()->propertyValue();
+                    } else if (prop->is<rive::CustomPropertyColor>()) {
+                        properties[prop_name] = (int)prop->as<rive::CustomPropertyColor>()->propertyValue();
+                    }
+                }
+
+                emit_signal("rive_event", event_name, properties, report.secondsDelay());
+            }
         } else if (animation) {
             animation->advance(delta);
             animation->apply();
