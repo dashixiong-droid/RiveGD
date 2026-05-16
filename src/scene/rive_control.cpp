@@ -162,9 +162,14 @@ void RiveControl::load_file()
         return;
 
     PackedByteArray data = rive_file->get_data();
+    // Use source_path if set, otherwise fall back to Godot's Resource::get_path()
+    String asset_path = rive_file->get_source_path();
+    if (asset_path.is_empty()) {
+        asset_path = rive_file->get_path();
+    }
 
     if (rive_player.is_valid()) {
-        if (rive_player->load_from_bytes(data)) {
+        if (rive_player->load_from_bytes(data, asset_path)) {
             _apply_property_values();
             notify_property_list_changed();
             UtilityFunctions::print_verbose("Rive file loaded successfully.");

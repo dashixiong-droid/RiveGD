@@ -1,5 +1,6 @@
 #include "rive_player.h"
 #include "../renderer/rive_render_registry.h"
+#include "../renderer/godot_file_asset_loader.h"
 #include <godot_cpp/variant/utility_functions.hpp>
 #include <godot_cpp/core/class_db.hpp>
 
@@ -13,7 +14,7 @@ RivePlayer::RivePlayer() {
 RivePlayer::~RivePlayer() {
 }
 
-bool RivePlayer::load_from_bytes(const PackedByteArray &data) {
+bool RivePlayer::load_from_bytes(const PackedByteArray &data, const String &asset_path) {
     rive::Factory *factory = RiveRenderRegistry::get_singleton()->get_factory();
     if (!factory) {
         ERR_PRINT("Rive factory not available (context not created?)");
@@ -22,8 +23,21 @@ bool RivePlayer::load_from_bytes(const PackedByteArray &data) {
 
     rive::Span<const uint8_t> bytes(data.ptr(), data.size());
     rive::ImportResult result;
-    rive::rcp<rive::File> file = rive::File::import(bytes, factory, &result);
-    
+
+    // Create a FileAssetLoader for out-of-band assets (fonts, images)
+    rive::rcp<rive_integration::GodotFileAssetLoader> asset_loader;
+    if (!asset_path.is_empty()) {
+        asset_loader = rive::rcp<rive_integration::GodotFileAssetLoader>(
+            new rive_integration::GodotFileAssetLoader(asset_path));
+    }
+
+    rive::rcp<rive::File> file = rive::File::import(bytes, factory, &result, asset_loader);
+
+    if (!file) {
+        ERR_PRINT(vformat("Failed to import Rive file. Result: %d", (int)result));
+        return false;
+    }
+
     return load(file);
 }
 
@@ -212,4 +226,3 @@ Ref<RiveViewModelInstance> RivePlayer::get_rive_view_model_instance() {
     }
     return wrapper_view_model_instance;
 }
-

@@ -21,6 +21,7 @@ public:
 
 private:
     PackedByteArray data;
+    String source_path;  // The res:// path of the original .riv file
     rive::rcp<rive::File> rive_file;
     Ref<RiveSVG> rive_svg;
     Type file_type = TYPE_RIVE;
@@ -34,6 +35,9 @@ public:
 
     void set_data(const PackedByteArray &p_data);
     PackedByteArray get_data() const;
+
+    void set_source_path(const String &p_path);
+    String get_source_path() const;
 
     Error load_rive_file();
     rive::File* get_rive_file();
