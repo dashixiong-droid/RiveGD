@@ -249,9 +249,9 @@ elif rive_env["platform"] in ["windows", "linuxbsd"]:
                 break
 
 elif rive_env["platform"] == "android":
-    # Android uses OpenGL/GLES backend (Vulkan requires SPIR-V shaders + VMA not available)
-    rive_env.Append(CPPDEFINES=["RIVE_ANDROID"])
-    rive_env.Append(LIBS=["GLESv3", "EGL"])
+    # Android supports both Vulkan and OpenGL/GLES backends
+    rive_env.Append(CPPDEFINES=["RIVE_ANDROID", "RIVE_VULKAN", "RIVE_UPSTREAM_VULKAN_IMPL", "VULKAN_ENABLED"])
+    rive_env.Append(LIBS=["GLESv3", "EGL", "vulkan"])
 
 if rive_env["platform"] == "windows":
     # D3D12 configuration (Windows only)
@@ -303,7 +303,7 @@ else:
     # macOS: explicitly exclude all D3D directories
     exclude_dir_names.update({'d3d', 'd3d11', 'd3d12'})
 
-if rive_env["platform"] in ["windows", "linuxbsd"]:
+if rive_env["platform"] in ["windows", "linuxbsd", "android"]:
     if 'vulkan' in exclude_dir_names: exclude_dir_names.remove('vulkan')
 
 if rive_env["platform"] == "windows":
