@@ -11,6 +11,9 @@
 #include <rive/custom_property_boolean.hpp>
 #include <rive/custom_property_color.hpp>
 #include <rive/container_component.hpp>
+#include <rive/audio_event.hpp>
+#include <rive/assets/audio_asset.hpp>
+#include <rive/audio/audio_source.hpp>
 
 void RivePlayer::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_rive_view_model_instance"), &RivePlayer::get_rive_view_model_instance);
@@ -19,6 +22,12 @@ void RivePlayer::_bind_methods() {
         PropertyInfo(Variant::STRING, "name"),
         PropertyInfo(Variant::DICTIONARY, "properties"),
         PropertyInfo(Variant::FLOAT, "delay")));
+
+    ADD_SIGNAL(MethodInfo("rive_audio_event",
+        PropertyInfo(Variant::STRING, "name"),
+        PropertyInfo(Variant::PACKED_BYTE_ARRAY, "audio_data"),
+        PropertyInfo(Variant::STRING, "format"),
+        PropertyInfo(Variant::FLOAT, "volume")));
 }
 
 RivePlayer::RivePlayer() {
@@ -74,9 +83,7 @@ void RivePlayer::set_artboard(std::unique_ptr<rive::ArtboardInstance> p_artboard
     rive_file = p_file;
 
     if (artboard) {
-        UtilityFunctions::print_verbose("RivePlayer: Advancing artboard 0.0f");
         artboard->advance(0.0f);
-        UtilityFunctions::print_verbose("RivePlayer: Artboard advanced");
 
         if (rive_file) {
             int viewModelId = artboard->viewModelId();
@@ -163,6 +170,43 @@ void RivePlayer::advance(float delta) {
                 }
 
                 emit_signal("rive_event", event_name, properties, report.secondsDelay());
+
+                // Handle AudioEvent: extract raw audio bytes and emit to GDScript
+                if (event->is<rive::AudioEvent>()) {
+                    auto* audioEvent = event->as<rive::AudioEvent>();
+                    auto fileAsset = audioEvent->asset();
+                    if (fileAsset && fileAsset->is<rive::AudioAsset>()) {
+                        auto* audioAsset = fileAsset->as<rive::AudioAsset>();
+                        auto audioSource = audioAsset->audioSource();
+                        if (audioSource) {
+                            // Get raw audio bytes from AudioSource
+                            auto audioBytes = audioSource->bytes();
+                            if (audioBytes.size() > 0) {
+                                PackedByteArray audio_data;
+                                audio_data.resize(audioBytes.size());
+                                memcpy(audio_data.ptrw(), audioBytes.data(), audioBytes.size());
+
+                                // Determine format string for Godot
+                                String format_str;
+                                switch (audioSource->format()) {
+                                    case rive::AudioFormat::wav:   format_str = "wav"; break;
+                                    case rive::AudioFormat::mp3:   format_str = "mp3"; break;
+                                    case rive::AudioFormat::flac:  format_str = "flac"; break;
+                                    case rive::AudioFormat::vorbis: format_str = "ogg"; break;
+                                    default: format_str = "wav"; break;
+                                }
+
+                                // Volume = asset volume * artboard volume
+                                float vol = audioAsset->volume();
+                                if (artboard) {
+                                    vol *= artboard->volume();
+                                }
+
+                                emit_signal("rive_audio_event", event_name, audio_data, format_str, vol);
+                            }
+                        }
+                    }
+                }
             }
         } else if (animation) {
             animation->advance(delta);
