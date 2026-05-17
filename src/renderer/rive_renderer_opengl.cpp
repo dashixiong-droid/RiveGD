@@ -3,7 +3,12 @@
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
+#ifdef RIVE_ANDROID
+#include <EGL/egl.h>
+#include "rive/renderer/gl/gles3.hpp"
+#else
 #include "glad_custom.h"
+#endif
 #include "rive/renderer/gl/render_context_gl_impl.hpp"
 #include "rive/renderer/gl/render_target_gl.hpp"
 #include "rive/renderer/rive_renderer.hpp"
@@ -37,6 +42,8 @@ static void* get_gl_proc(const char* name) {
     if (!libgl) {
         libgl = dlopen("libGL.so", RTLD_LAZY);
         if (!libgl) libgl = dlopen("libGL.so.1", RTLD_LAZY);
+        if (!libgl) libgl = dlopen("libGLESv3.so", RTLD_LAZY);
+        if (!libgl) libgl = dlopen("libGLESv2.so", RTLD_LAZY);
         if (!libgl) libgl = dlopen("/System/Library/Frameworks/OpenGL.framework/OpenGL", RTLD_LAZY);
     }
     if (libgl) {
@@ -49,10 +56,16 @@ static void* get_gl_proc(const char* name) {
 bool create_opengl_context() {
     if (g_rive_context) return true;
 
+#ifdef RIVE_ANDROID
+    // On Android, load GL functions via eglGetProcAddress
+    // glad is not available; we rely on NDK GLES headers + runtime extension loading
+    // The RenderContextGLImpl will use eglGetProcAddress internally for extensions
+#else
     if (!gladLoadCustomLoader((GLADloadfunc)get_gl_proc)) {
         UtilityFunctions::printerr("Rive: Failed to load OpenGL functions.");
         return false;
     }
+#endif
 
     g_rive_context = RenderContextGLImpl::MakeContext({}).release();
 

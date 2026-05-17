@@ -123,3 +123,15 @@ std::unique_ptr<rive::ArtboardInstance> RiveFile::instantiate_artboard(String na
     
     return artboard;
 }
+
+PackedStringArray RiveFile::get_artboard_list() const {
+    PackedStringArray list;
+    if (!rive_file) return list;
+    for (size_t i = 0; i < rive_file->artboardCount(); ++i) {
+        const rive::Artboard* ab = rive_file->artboard(i);
+        if (ab) {
+            list.push_back(String(ab->name().c_str()));
+        }
+    }
+    return list;
+}

@@ -43,6 +43,7 @@ public:
     rive::File* get_rive_file();
     
     std::unique_ptr<rive::ArtboardInstance> instantiate_artboard(String name = "");
+    PackedStringArray get_artboard_list() const;
 };
 
 #endif // RIVE_FILE_H

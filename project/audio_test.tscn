@@ -1,12 +1,37 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://bwnjk1fnbhr47"]
 
-[ext_resource type="Script" path="res://audio_test.gd" id="1"]
+[ext_resource type="RiveFile" uid="uid://y016xf00qs6r" path="res://skills.riv" id="2_geulp"]
+[ext_resource type="RiveFile" uid="uid://cql6322433m8e" path="res://Santa_Claus.riv" id="2_qo7q4"]
 
-[node name="AudioTest" type="Control"]
+[node name="AudioTest" type="Control" unique_id=805792551]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_left = 6.0
+offset_top = -4.0
+offset_right = 6.0
+offset_bottom = -4.0
 grow_horizontal = 2
 grow_vertical = 2
-script = ExtResource("1")
+metadata/_edit_horizontal_guides_ = [-219.0]
+
+[node name="RiveControl" type="RiveControl" parent="." unique_id=1915684445]
+rive_file = ExtResource("2_qo7q4")
+state_machine_name = "State Machine 1"
+layout_mode = 1
+anchors_preset = -1
+offset_right = 1520.0
+offset_bottom = 862.0
+scale = Vector2(0.4364392, 0.47029194)
+
+[node name="RiveControl2" type="RiveControl" parent="." unique_id=730298958]
+rive_file = ExtResource("2_geulp")
+state_machine_name = "Designer's Test"
+layout_mode = 1
+anchors_preset = -1
+offset_left = 545.0
+offset_top = 2.861023e-05
+offset_right = 2065.0
+offset_bottom = 862.0
+scale = Vector2(1.2273734, 1.3225756)
