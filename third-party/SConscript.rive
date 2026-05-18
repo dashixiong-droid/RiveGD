@@ -208,8 +208,8 @@ rive_env.Append(CPPDEFINES=[
 if rive_env["platform"] != "windows":
     rive_env.Append(CCFLAGS=['-Wno-unused-function', '-Wno-error=unused-function', '-Wno-macro-redefined'])
 
-# Force include unistd.h for zlib on macOS/Android to fix implicit function declaration errors
-if rive_env["platform"] in ["macos", "android"]:
+# Force include unistd.h for zlib on macOS/Android/Web to fix implicit function declaration errors
+if rive_env["platform"] in ["macos", "android", "web"]:
     rive_env.Append(CCFLAGS=['-include', 'unistd.h'])
 
 # Force include rive_harfbuzz_renames.h
@@ -252,6 +252,36 @@ elif rive_env["platform"] == "android":
     # Android supports both Vulkan and OpenGL/GLES backends
     rive_env.Append(CPPDEFINES=["RIVE_ANDROID", "RIVE_VULKAN", "RIVE_UPSTREAM_VULKAN_IMPL", "VULKAN_ENABLED"])
     rive_env.Append(LIBS=["GLESv3", "EGL", "vulkan"])
+
+elif rive_env["platform"] == "web":
+    # Web platform: WebGL via Emscripten
+    rive_env.Append(CPPDEFINES=["RIVE_WEBGL"])
+    # Emscripten provides GLES3 headers natively
+    # No need for glad, EGL, or Vulkan on web
+
+    # C++20 required for libc++ source files (constinit, ranges, etc.)
+    rive_env.Append(CXXFLAGS=["-std=c++20"])
+    # Required macro when compiling libc++ sources - enables internal APIs
+    rive_env.Append(CPPDEFINES=["_LIBCPP_BUILDING_LIBRARY"])
+    # Force __hash_memory to be inline (not external) - LLVM 23 sets this to 1
+    # which makes __hash_memory an external symbol, but SIDE_MODULE can't import it
+    rive_env.Append(CPPDEFINES=["_LIBCPP_AVAILABILITY_HAS_HASH_MEMORY=0"])
+    # Remove libc++ ABI tags (B8nn210108 etc) so our symbol names match
+    # Godot's dlink template exports (which use B8nn200100 or no tag).
+    # Without this, iostream/locale symbols have mismatched ABI tags.
+    rive_env.Append(CPPDEFINES=["_LIBCPP_NO_ABI_TAG"])
+
+    # Emscripten's SIDE_MODULE mode skips stdlib linking (system_libs.py line 2388),
+    # and Godot's dlink template doesn't export libc++ symbols either.
+    # Solution: compile libc++ source files directly into our static library.
+    # Since rive_env already has -fPIC (from SIDE_MODULE), these will be PIC-compatible.
+    emsdk_dir = os.environ.get("EMSDK", "")
+    libcxx_src = os.path.join(emsdk_dir, "upstream", "emscripten", "system", "lib", "libcxx", "src")
+    # NOTE: Do NOT add libcxx/include to CPPPATH - emcc already provides it via sysroot
+    # (cache/sysroot/include/c++/v1). Adding it manually causes math.h conflicts.
+
+    # Add pthread stubs for nothreads build (Rive uses std::mutex etc)
+    rive_env.Append(CPPDEFINES=["RIVE_WEB_NOTHREADS"])
 
 if rive_env["platform"] == "windows":
     # D3D12 configuration (Windows only)
@@ -316,11 +346,15 @@ for d in dirs_to_scan:
         dirs[:] = [x for x in dirs if x not in exclude_dir_names]
         for f in files:
             if f.endswith('.cpp') or (f.endswith('.mm') and rive_env["platform"] == "macos"):
-                # Exclude EGL dependent file on non-Android platforms
+                # Exclude EGL-dependent file on platforms that don't use EGL
+                # (Web uses Emscripten's built-in WebGL, not EGL)
                 if f == "load_gles_extensions.cpp" and rive_env["platform"] != "android":
                     continue
                 # Exclude WebGL PLS impl on non-web platforms
-                if f == "pls_impl_webgl.cpp":
+                if f == "pls_impl_webgl.cpp" and rive_env["platform"] != "web":
+                    continue
+                # Exclude native PLS impls on Web (only pls_impl_webgl.cpp is used)
+                if rive_env["platform"] == "web" and f in ["pls_impl_ext_native.cpp", "pls_impl_rw_texture.cpp"]:
                     continue
                 
                 rive_sources.append(os.path.join(root, f))
@@ -347,7 +381,7 @@ if rive_env["platform"] == "macos":
         filtered_sources.append(s)
     rive_sources = filtered_sources
 
-if rive_env["platform"] != "android":
+if rive_env["platform"] not in ["android", "web"]:
     rive_sources.append(os.path.join(rive_dir, "renderer", "glad", "glad_custom.c"))
     rive_sources.append(os.path.join(rive_dir, "renderer", "glad", "src", "gles2.c"))
     rive_sources.append(os.path.join(rive_dir, "renderer", "glad", "src", "egl.c"))
@@ -497,6 +531,51 @@ rive_decoders_sources = [
 ]
 for s in rive_decoders_sources:
     rive_sources.append(os.path.join(rive_decoders_dir, s))
+
+# --- Web platform: exclude unused sources + add libc++ sources ---
+if rive_env["platform"] == "web":
+    # Exclude sources that use std::thread heavily and aren't needed by our plugin
+    web_excludes = {
+        "command_server.cpp",   # uses std::thread - not used by our plugin
+        "command_queue.cpp",    # uses std::mutex/condition_variable - not used by our plugin
+        "animation_reset_factory.cpp",  # not used by our plugin
+    }
+    filtered_sources = []
+    for s in rive_sources:
+        basename = os.path.basename(s)
+        if basename in web_excludes:
+            print(f"RIVE: Excluding {basename} on web (unused dependency)")
+            continue
+        filtered_sources.append(s)
+    rive_sources = filtered_sources
+
+    # Add libc++ source files to provide stdlib symbols that SIDE_MODULE skips
+    # and Godot's dlink template doesn't export.
+    # These are compiled with rive_env which has -fPIC (from SIDE_MODULE).
+    emsdk_dir = os.environ.get("EMSDK", "")
+    libcxx_src = os.path.join(emsdk_dir, "upstream", "emscripten", "system", "lib", "libcxx", "src")
+    libcxx_sources = [
+        "hash.cpp",              # __next_prime (note: __hash_memory is now inline via availability.h patch)
+        "string.cpp",            # std::string operations
+        "ios.cpp",               # ios_base::init, ios_base::clear
+        "ostream.cpp",           # std::ostream
+        "iostream.cpp",          # std::iostream
+        "locale.cpp",            # std::locale
+        "chrono.cpp",            # std::chrono::steady_clock::now
+        "condition_variable.cpp", # std::condition_variable (stubbed by web_pthread_stubs)
+        "mutex.cpp",             # std::mutex (stubbed by web_pthread_stubs)
+        "algorithm.cpp",         # std::__sort
+        "new.cpp",               # operator new/delete
+        "stdexcept.cpp",         # std::runtime_error etc
+        "typeinfo.cpp",          # __dynamic_cast support
+    ]
+    for s in libcxx_sources:
+        src_path = os.path.join(libcxx_src, s)
+        if os.path.exists(src_path):
+            rive_sources.append(src_path)
+            print(f"RIVE: Adding libc++ source: {s}")
+        else:
+            print(f"RIVE: WARNING - libc++ source not found: {src_path}")
 
 # Build the library
 # We use StaticLibrary because we will link it into the final shared library

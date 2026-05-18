@@ -83,7 +83,9 @@ void RivePlayer::set_artboard(std::unique_ptr<rive::ArtboardInstance> p_artboard
     rive_file = p_file;
 
     if (artboard) {
+        UtilityFunctions::print_verbose("RivePlayer: Advancing artboard 0.0f");
         artboard->advance(0.0f);
+        UtilityFunctions::print_verbose("RivePlayer: Artboard advanced");
 
         if (rive_file) {
             int viewModelId = artboard->viewModelId();

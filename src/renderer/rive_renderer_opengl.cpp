@@ -3,8 +3,8 @@
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
-#ifdef RIVE_ANDROID
-#include <EGL/egl.h>
+#if defined(RIVE_ANDROID) || defined(RIVE_WEBGL)
+#include <GLES3/gl3.h>
 #include "rive/renderer/gl/gles3.hpp"
 #else
 #include "glad_custom.h"
@@ -56,10 +56,10 @@ static void* get_gl_proc(const char* name) {
 bool create_opengl_context() {
     if (g_rive_context) return true;
 
-#ifdef RIVE_ANDROID
-    // On Android, load GL functions via eglGetProcAddress
-    // glad is not available; we rely on NDK GLES headers + runtime extension loading
-    // The RenderContextGLImpl will use eglGetProcAddress internally for extensions
+#if defined(RIVE_ANDROID) || defined(RIVE_WEBGL)
+    // On Android/Web, load GL functions via runtime extension loading
+    // glad is not available; we rely on GLES headers + runtime extension loading
+    // The RenderContextGLImpl will use eglGetProcAddress/emscripten internally for extensions
 #else
     if (!gladLoadCustomLoader((GLADloadfunc)get_gl_proc)) {
         UtilityFunctions::printerr("Rive: Failed to load OpenGL functions.");
