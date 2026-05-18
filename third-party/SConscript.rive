@@ -228,7 +228,7 @@ else:
 if rive_env["platform"] == "macos":
     rive_env.Append(CCFLAGS=["-fobjc-arc"])
     rive_env.Append(FRAMEWORKS=["Metal", "Foundation", "QuartzCore", "AppKit", "CoreGraphics", "CoreText", "AudioToolbox"])
-    rive_env.Append(CPPDEFINES=["RIVE_METAL", "RIVE_DESKTOP_GL"])
+    rive_env.Append(CPPDEFINES=["RIVE_METAL"])
 elif rive_env["platform"] in ["windows", "linuxbsd"]:
     rive_env.Append(CPPDEFINES=["RIVE_DESKTOP_GL", "RIVE_VULKAN", "RIVE_UPSTREAM_VULKAN_IMPL", "VULKAN_ENABLED"])
 
@@ -330,8 +330,8 @@ exclude_dir_names = {'d3d', 'd3d11', 'd3d12', 'vulkan', 'webgpu', 'dawn', 'andro
 if rive_env["platform"] != "macos":
     exclude_dir_names.add('metal')
 else:
-    # macOS: explicitly exclude all D3D directories
-    exclude_dir_names.update({'d3d', 'd3d11', 'd3d12'})
+    # macOS: explicitly exclude all D3D directories and GL (macOS uses Metal only)
+    exclude_dir_names.update({'d3d', 'd3d11', 'd3d12', 'gl'})
 
 if rive_env["platform"] in ["windows", "linuxbsd", "android"]:
     if 'vulkan' in exclude_dir_names: exclude_dir_names.remove('vulkan')
@@ -371,7 +371,8 @@ if rive_env["platform"] == "macos":
         except Exception:
             return str(node)
 
-    d3d_excludes = {"rive_renderer_d3d12.cpp", "rive_renderer_d3d12.mm", "rive_renderer_d3d12.c"}
+    d3d_excludes = {"rive_renderer_d3d12.cpp", "rive_renderer_d3d12.mm", "rive_renderer_d3d12.c",
+                    "rive_renderer_opengl.cpp"}
     filtered_sources = []
     for s in rive_sources:
         name = _basename(s)
@@ -381,7 +382,7 @@ if rive_env["platform"] == "macos":
         filtered_sources.append(s)
     rive_sources = filtered_sources
 
-if rive_env["platform"] not in ["android", "web"]:
+if rive_env["platform"] not in ["android", "web", "macos"]:
     rive_sources.append(os.path.join(rive_dir, "renderer", "glad", "glad_custom.c"))
     rive_sources.append(os.path.join(rive_dir, "renderer", "glad", "src", "gles2.c"))
     rive_sources.append(os.path.join(rive_dir, "renderer", "glad", "src", "egl.c"))
