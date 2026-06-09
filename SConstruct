@@ -74,6 +74,9 @@ if extension_env["platform"] != "windows":
 if extension_env["platform"] == "macos":
     # macOS uses Metal only — exclude OpenGL renderer (glad-dependent)
     excludes.update({"rive_renderer_opengl.cpp"})
+if extension_env["platform"] == "windows":
+    # Windows uses D3D12/Vulkan — exclude OpenGL renderer
+    excludes.update({"rive_renderer_opengl.cpp"})
 
 filtered_sources = []
 for s in sources:
