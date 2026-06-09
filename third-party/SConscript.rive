@@ -330,14 +330,17 @@ dirs_to_scan = [
     os.path.join(rive_dir, 'renderer', 'src')
 ]
 
-exclude_dir_names = {'d3d', 'd3d11', 'd3d12', 'vulkan', 'webgpu', 'dawn', 'android', 'ios', 'webgl'}
+exclude_dir_names = {'d3d', 'd3d11', 'd3d12', 'vulkan', 'webgpu', 'dawn', 'android', 'ios', 'webgl', 'gl'}
 if rive_env["platform"] == "macos":
-    exclude_dir_names.update({'d3d', 'd3d11', 'd3d12', 'gl'})
+    exclude_dir_names.update({'d3d', 'd3d11', 'd3d12'})
 elif rive_env["platform"] == "ios":
-    exclude_dir_names.update({'d3d', 'd3d11', 'd3d12', 'gl', 'vulkan'})
+    exclude_dir_names.update({'d3d', 'd3d11', 'd3d12', 'vulkan'})
     if 'ios' in exclude_dir_names: exclude_dir_names.remove('ios')
     if 'metal' in exclude_dir_names: exclude_dir_names.remove('metal')
-elif rive_env["platform"] != "macos":
+elif rive_env["platform"] == "web":
+    if 'gl' in exclude_dir_names: exclude_dir_names.remove('gl')
+    if 'webgl' in exclude_dir_names: exclude_dir_names.remove('webgl')
+else:
     exclude_dir_names.add('metal')
 
 if rive_env["platform"] in ["windows", "linuxbsd", "android"]:
