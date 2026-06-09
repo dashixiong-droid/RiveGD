@@ -229,6 +229,10 @@ if rive_env["platform"] == "macos":
     rive_env.Append(CCFLAGS=["-fobjc-arc"])
     rive_env.Append(FRAMEWORKS=["Metal", "Foundation", "QuartzCore", "AppKit", "CoreGraphics", "CoreText", "AudioToolbox"])
     rive_env.Append(CPPDEFINES=["RIVE_METAL"])
+elif rive_env["platform"] == "ios":
+    rive_env.Append(CCFLAGS=["-fobjc-arc"])
+    rive_env.Append(FRAMEWORKS=["Metal", "Foundation", "QuartzCore", "UIKit", "CoreGraphics", "CoreText", "AudioToolbox"])
+    rive_env.Append(CPPDEFINES=["RIVE_METAL", "RIVE_IOS"])
 elif rive_env["platform"] in ["windows", "linuxbsd"]:
     rive_env.Append(CPPDEFINES=["RIVE_DESKTOP_GL", "RIVE_VULKAN", "RIVE_UPSTREAM_VULKAN_IMPL", "VULKAN_ENABLED"])
 
@@ -327,11 +331,14 @@ dirs_to_scan = [
 ]
 
 exclude_dir_names = {'d3d', 'd3d11', 'd3d12', 'vulkan', 'webgpu', 'dawn', 'android', 'ios', 'webgl'}
-if rive_env["platform"] != "macos":
-    exclude_dir_names.add('metal')
-else:
-    # macOS: explicitly exclude all D3D directories and GL (macOS uses Metal only)
+if rive_env["platform"] == "macos":
     exclude_dir_names.update({'d3d', 'd3d11', 'd3d12', 'gl'})
+elif rive_env["platform"] == "ios":
+    exclude_dir_names.update({'d3d', 'd3d11', 'd3d12', 'gl', 'vulkan'})
+    if 'ios' in exclude_dir_names: exclude_dir_names.remove('ios')
+    if 'metal' in exclude_dir_names: exclude_dir_names.remove('metal')
+elif rive_env["platform"] != "macos":
+    exclude_dir_names.add('metal')
 
 if rive_env["platform"] in ["windows", "linuxbsd", "android"]:
     if 'vulkan' in exclude_dir_names: exclude_dir_names.remove('vulkan')
@@ -345,7 +352,7 @@ for d in dirs_to_scan:
     for root, dirs, files in os.walk(d):
         dirs[:] = [x for x in dirs if x not in exclude_dir_names]
         for f in files:
-            if f.endswith('.cpp') or (f.endswith('.mm') and rive_env["platform"] == "macos"):
+            if f.endswith('.cpp') or (f.endswith('.mm') and rive_env["platform"] in ["macos", "ios"]):
                 # Exclude EGL-dependent file on platforms that don't use EGL
                 # (Web uses Emscripten's built-in WebGL, not EGL)
                 if f == "load_gles_extensions.cpp" and rive_env["platform"] != "android":

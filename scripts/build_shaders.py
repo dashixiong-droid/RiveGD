@@ -336,6 +336,11 @@ def main():
         generate_vulkan_shaders(shaders_dir, out_dir)
     elif platform == 'android':
         generate_vulkan_shaders(shaders_dir, out_dir)
+    elif platform == 'ios':
+        generate_metal_shaders(shaders_dir, out_dir)
+    elif platform == 'web':
+        # Web uses WebGL at runtime — only minification needed, no precompiled shaders
+        pass
     else:
         # Default to trying all if no platform specified or unknown
         generate_d3d_shaders(shaders_dir, out_dir)

@@ -10,7 +10,7 @@ on:
         required: false
         default: ""
       platforms:
-        description: "Which platforms to build (comma-separated subset of: macos,windows,linux). Default: all."
+        description: "Which platforms to build (comma-separated subset of: macos,windows,linux,android,web,ios). Default: all."
         required: false
         default: "all"
 
@@ -30,7 +30,9 @@ jobs:
             {"name":"macos-universal","runner":"macos-14","platform":"macos","shader_platform":"macos","arch":"universal"},
             {"name":"windows-x86_64","runner":"windows-2022","platform":"windows","shader_platform":"windows","arch":"x86_64"},
             {"name":"linux-x86_64","runner":"ubuntu-22.04","platform":"linux","shader_platform":"linuxbsd","arch":"x86_64"},
-            {"name":"android-arm64","runner":"ubuntu-22.04","platform":"android","shader_platform":"android","arch":"arm64"}
+            {"name":"android-arm64","runner":"ubuntu-22.04","platform":"android","shader_platform":"android","arch":"arm64"},
+            {"name":"web-wasm32","runner":"ubuntu-22.04","platform":"web","shader_platform":"web","arch":"wasm32"},
+            {"name":"ios-arm64","runner":"macos-14","platform":"ios","shader_platform":"ios","arch":"arm64"}
           ]'
           if [ "$PLATFORMS" = "all" ]; then
             filtered="$all"
@@ -85,6 +87,19 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_ROOT=$ANDROID_NDK_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+
+      # Web (Emscripten): install emsdk for wasm32 build
+      - name: Setup Emscripten
+        if: matrix.config.platform == 'web'
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.74
+
+      # iOS: install Vulkan deps for shader build + link frameworks
+      - name: Setup iOS build
+        if: matrix.config.platform == 'ios'
+        run: |
+          brew install glslang spirv-tools || true
 
       # Windows: enable MSVC + ensure fxc.exe (Windows SDK) is on PATH for shader build.
       - name: Setup MSVC
