@@ -1,0 +1,23 @@
+[gd_scene load_steps=4 format=3 uid="uid://d7qgqg37o4vok"]
+
+[ext_resource type="RiveFile" uid="uid://dgkfb2snt6fvx" path="res://studiorun.riv" id="1_rive"]
+[ext_resource type="Script" path="res://studiorun.gd" id="2_script"]
+
+[node name="StudioRun" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("2_script")
+
+[node name="RiveControl" type="RiveControl" parent="."]
+rive_file = ExtResource("1_rive")
+state_machine_name = "STATE MACHINE"
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
