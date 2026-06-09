@@ -93,8 +93,8 @@ def generate_d3d_shaders(shaders_dir, out_dir):
             cmd_sig = [fxc_cmd, '/I', out_dir, '/T', 'rootsig_1_1', '/E', 'ROOT_SIG', '/Fh', root_sig_out, root_sig_src]
             run(cmd_sig)
 
-def generate_metal_shaders(shaders_dir, out_dir):
-    print(f"Generating Metal shaders from {shaders_dir} to {out_dir}")
+def generate_metal_shaders(shaders_dir, out_dir, platform_name="macos"):
+    print(f"Generating Metal shaders for {platform_name} from {shaders_dir} to {out_dir}")
     metal_out = os.path.join(out_dir, 'macosx')
     ensure_dir(metal_out)
     
@@ -132,23 +132,25 @@ def generate_metal_shaders(shaders_dir, out_dir):
         air_files.append(air_out)
         
     # Link
-    metallib_out = os.path.join(metal_out, 'rive_pls_macosx.metallib')
+    metallib_name = f'rive_pls_{platform_name}.metallib'
+    metallib_out = os.path.join(metal_out, metallib_name)
     cmd_link = ['xcrun', '-sdk', 'macosx', 'metallib'] + air_files + ['-o', metallib_out]
     run(cmd_link)
     
     # Convert to C header
-    c_out = os.path.join(out_dir, 'rive_pls_macosx.metallib.c')
+    c_out = os.path.join(out_dir, f'rive_pls_{platform_name}.metallib.c')
+    var_prefix = f'rive_pls_{platform_name}_metallib'
     with open(metallib_out, 'rb') as f:
         data = f.read()
     
     with open(c_out, 'w') as f:
-        f.write('unsigned char rive_pls_macosx_metallib[] = {')
+        f.write(f'unsigned char {var_prefix}[] = {{')
         for i, byte in enumerate(data):
             if i % 12 == 0:
                 f.write('\n  ')
             f.write(f'0x{byte:02x}, ')
         f.write('\n};\n')
-        f.write(f'unsigned int rive_pls_macosx_metallib_len = {len(data)};\n')
+        f.write(f'unsigned int {var_prefix}_len = {len(data)};\n')
 
 def generate_vulkan_shaders(shaders_dir, out_dir):
     print(f"Generating Vulkan shaders from {shaders_dir} to {out_dir}")
@@ -337,7 +339,7 @@ def main():
     elif platform == 'android':
         generate_vulkan_shaders(shaders_dir, out_dir)
     elif platform == 'ios':
-        generate_metal_shaders(shaders_dir, out_dir)
+        generate_metal_shaders(shaders_dir, out_dir, platform_name="ios")
     elif platform == 'web':
         # Web uses WebGL at runtime — only minification needed, no precompiled shaders
         pass
