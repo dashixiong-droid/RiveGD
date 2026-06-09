@@ -233,8 +233,10 @@ elif rive_env["platform"] == "ios":
     rive_env.Append(CCFLAGS=["-fobjc-arc"])
     rive_env.Append(FRAMEWORKS=["Metal", "Foundation", "QuartzCore", "UIKit", "CoreGraphics", "CoreText", "AudioToolbox"])
     rive_env.Append(CPPDEFINES=["RIVE_METAL", "RIVE_IOS"])
-elif rive_env["platform"] in ["windows", "linuxbsd"]:
+elif rive_env["platform"] == "linuxbsd":
     rive_env.Append(CPPDEFINES=["RIVE_DESKTOP_GL", "RIVE_VULKAN", "RIVE_UPSTREAM_VULKAN_IMPL", "VULKAN_ENABLED"])
+elif rive_env["platform"] == "windows":
+    rive_env.Append(CPPDEFINES=["RIVE_VULKAN", "RIVE_UPSTREAM_VULKAN_IMPL", "VULKAN_ENABLED"])
 
     # Pick up VULKAN_SDK headers on Windows + Linux (LunarG ships modern Vulkan headers
     # the system packages may be too old for, e.g. VK_ARM_format_pack added in 1.4.318).
