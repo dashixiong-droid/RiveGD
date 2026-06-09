@@ -1,0 +1,33 @@
+diff --git a/renderer/src/vulkan/render_pass_vulkan.cpp b/renderer/src/vulkan/render_pass_vulkan.cpp
+index 32f3ac99..0b43d0cd 100644
+--- a/renderer/src/vulkan/render_pass_vulkan.cpp
++++ b/renderer/src/vulkan/render_pass_vulkan.cpp
+@@ -118,10 +118,19 @@ static uint32_t vk_sparse_format_index(VkFormat format)
+         // locally installed MoltenVk headers instead of the Rive-official
+         // Vulkan headers when building for Apple.
+         // The following VkFormats are not defined in MoltenVK's headers.
++#ifdef VK_FORMAT_A1B5G5R5_UNORM_PACK16
+         case VK_FORMAT_A1B5G5R5_UNORM_PACK16: return 54;
++#endif
++#ifdef VK_FORMAT_A8_UNORM
+         case VK_FORMAT_A8_UNORM: return 55;
+-        case VK_FORMAT_R8_BOOL_ARM: return 64;
++#endif
++#ifdef VK_FORMAT_R16G16_SFIXED5_NV
+         case VK_FORMAT_R16G16_SFIXED5_NV: return 65;
++#endif
++#ifdef VK_FORMAT_R8_BOOL_ARM
++        // ARM-specific VkFormats may not be defined in all Vulkan headers
++        // (e.g., Android NDK). Only compile when available.
++        case VK_FORMAT_R8_BOOL_ARM: return 64;
+         case VK_FORMAT_R10X6_UINT_PACK16_ARM: return 66;
+         case VK_FORMAT_R10X6G10X6_UINT_2PACK16_ARM: return 67;
+         case VK_FORMAT_R10X6G10X6B10X6A10X6_UINT_4PACK16_ARM: return 68;
+@@ -136,6 +145,7 @@ static uint32_t vk_sparse_format_index(VkFormat format)
+         case VK_FORMAT_R14X2G14X2B14X2A14X2_UNORM_4PACK16_ARM: return 77;
+         case VK_FORMAT_G14X2_B14X2R14X2_2PLANE_420_UNORM_3PACK16_ARM: return 78;
+         case VK_FORMAT_G14X2_B14X2R14X2_2PLANE_422_UNORM_3PACK16_ARM: return 79;
++#endif // VK_FORMAT_R8_BOOL_ARM
+ #endif
+         default: break;
+             // clang-format on

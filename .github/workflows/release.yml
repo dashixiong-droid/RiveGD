@@ -77,6 +77,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y glslang-tools spirv-tools libegl1-mesa-dev libvulkan-dev
+          # Apply patches to rive-runtime for Android compatibility
+          git -C third-party/rive-runtime apply ../../third-party/patches/vulkan-arm-fix.patch || true
+          cp third-party/patches/vk_mem_alloc.h third-party/rive-runtime/renderer/include/
           # godot-cpp expects NDK at $ANDROID_HOME/ndk/<ndk_version> where ndk_version defaults to 28.1.13356709.
           # GHA ubuntu-22.04 ships 27.3.13750724 as default — fix the path manually.
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
