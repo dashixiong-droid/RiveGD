@@ -203,7 +203,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: godot-rive-g${{ matrix.godot }}-${{ matrix.config.name }}-${{ matrix.target }}
+          name: g${{ matrix.godot }}-${{ matrix.config.name }}-${{ matrix.target }}
           path: staged/**
           if-no-files-found: error
           retention-days: 14
@@ -231,13 +231,13 @@ jobs:
           set -e
           for godot_ver in 4.5 4.6; do
             mkdir -p "package-g${godot_ver}/addons/godot-rive/bin"
-            for d in dist/godot-rive-g${godot_ver}-*/addons/godot-rive; do
+            for d in dist/g${godot_ver}-*/addons/godot-rive; do
               if [ -d "$d" ]; then
                 cp -R "$d/." "package-g${godot_ver}/addons/godot-rive/"
               fi
             done
-            (cd "package-g${godot_ver}" && zip -r "../godot-rive-godot${godot_ver}-${{ github.ref_name }}.zip" addons)
-            ls -lh godot-rive-godot${godot_ver}-*.zip
+            (cd "package-g${godot_ver}" && zip -r "../godot-rive-godot${godot_ver}.zip" addons)
+            ls -lh godot-rive-godot${godot_ver}.zip
           done
 
       - name: Upload merged zip artifacts
