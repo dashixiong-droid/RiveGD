@@ -331,7 +331,7 @@ def main():
         generate_d3d_shaders(shaders_dir, out_dir)
         generate_vulkan_shaders(shaders_dir, out_dir)
     elif platform == 'macos':
-        generate_metal_shaders(shaders_dir, out_dir)
+        generate_metal_shaders(shaders_dir, out_dir, platform_name="macosx")
         # Vulkan on macOS is disabled for Rive to avoid MoltenVK issues
         # generate_vulkan_shaders(shaders_dir, out_dir)
     elif platform == 'linuxbsd':
