@@ -226,11 +226,14 @@ else:
 
 # Platform specific flags
 if rive_env["platform"] == "macos":
-    rive_env.Append(CCFLAGS=["-fobjc-arc"])
+    rive_env.Append(OBJCFLAGS=["-fobjc-arc"])
+    rive_env.Append(OBJCXXFLAGS=["-fobjc-arc"])
     rive_env.Append(FRAMEWORKS=["Metal", "Foundation", "QuartzCore", "AppKit", "CoreGraphics", "CoreText", "AudioToolbox"])
     rive_env.Append(CPPDEFINES=["RIVE_METAL"])
 elif rive_env["platform"] == "ios":
-    rive_env.Append(CCFLAGS=["-fobjc-arc"])
+    # Only ObjC/ObjC++ files need ARC — putting it in CCFLAGS pollutes C/C++ compilation
+    rive_env.Append(OBJCFLAGS=["-fobjc-arc"])
+    rive_env.Append(OBJCXXFLAGS=["-fobjc-arc"])
     rive_env.Append(FRAMEWORKS=["Metal", "Foundation", "QuartzCore", "UIKit", "CoreGraphics", "CoreText", "AudioToolbox"])
     rive_env.Append(CPPDEFINES=["RIVE_METAL", "RIVE_IOS"])
 elif rive_env["platform"] == "linuxbsd":
@@ -457,16 +460,7 @@ yoga_sources = [
 rive_sources.extend(yoga_sources)
 
 # Add Miniaudio sources
-# On iOS, miniaudio.c gets compiled with -fobjc-arc which causes
-# Foundation header conflicts. Use a .cpp wrapper instead.
-if rive_env["platform"] == "ios":
-    miniaudio_cpp = os.path.join(miniaudio_dir, "miniaudio_impl.cpp")
-    if not os.path.exists(miniaudio_cpp):
-        with open(miniaudio_cpp, 'w') as f:
-            f.write('#define MINIAUDIO_IMPLEMENTATION\n#include "miniaudio.h"\n')
-    rive_sources.append(miniaudio_cpp)
-else:
-    rive_sources.append(os.path.join(miniaudio_dir, "miniaudio.c"))
+rive_sources.append(os.path.join(miniaudio_dir, "miniaudio.c"))
 
 # Add LibPNG sources
 libpng_sources = [
