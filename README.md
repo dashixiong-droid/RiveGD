@@ -62,6 +62,44 @@ DO NOT USE IN PRODUCTION as APIs will change and stability is not tested well.
    - Choose an **Animation** or **State Machine** to play.
    - (Optional) Configure State Machine inputs directly in the Inspector under the "Rive" group.
 
+### Audio
+
+RiveGD does **not** play audio directly — it delegates to Godot's built-in audio system via the `rive_audio_event` signal. When a Rive file triggers an audio event, the raw audio bytes (WAV, MP3, FLAC, or OGG) are emitted to GDScript where you can play them with `AudioStreamPlayer`.
+
+```gdscript
+func _ready() -> void:
+    $RiveControl.rive_audio_event.connect(_on_rive_audio)
+
+func _on_rive_audio(name: String, audio_data: PackedByteArray,
+                    format: String, volume: float) -> void:
+    # Write raw bytes to temp file
+    var tmp_path := "user://rive_audio.%s" % format
+    var f := FileAccess.open(tmp_path, FileAccess.WRITE)
+    f.store_buffer(audio_data)
+    f.close()
+
+    # Load and play with Godot's AudioStreamPlayer
+    var player := AudioStreamPlayer.new()
+    add_child(player)
+
+    match format:
+        "ogg":
+            player.stream = AudioStreamOggVorbis.load_from_file(tmp_path)
+        "mp3":
+            player.stream = AudioStreamMP3.new()
+            player.stream.data = audio_data
+        "wav":
+            player.stream = AudioStreamWAV.new()
+            player.stream.data = audio_data
+        _:
+            # FLAC unsupported by default Godot — convert externally
+            return
+
+    player.volume_db = linear_to_db(volume)
+    player.finished.connect(player.queue_free)
+    player.play()
+```
+
 ## API Reference
 
 ### Scene Nodes
@@ -108,6 +146,7 @@ The primary node for UI integration. Handles rendering, input forwarding, and Vi
 | Signal | Parameters | Description |
 |---|---|---|
 | `rive_event` | `name: String, properties: Dictionary, delay: float` | Emitted when Rive fires an event |
+| `rive_audio_event` | `name: String, audio_data: PackedByteArray, format: String, volume: float` | Emitted when Rive plays audio (WAV/MP3/FLAC/OGG) |
 
 **Example**
 
@@ -235,6 +274,7 @@ Playback controller node.
 | Signal | Parameters | Description |
 |---|---|---|
 | `rive_event` | `name: String, properties: Dictionary, delay: float` | Rive event callback |
+| `rive_audio_event` | `name: String, audio_data: PackedByteArray, format: String, volume: float` | Rive audio event (WAV/MP3/FLAC/OGG) |
 
 ---
 
