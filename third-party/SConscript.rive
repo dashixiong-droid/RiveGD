@@ -21,7 +21,6 @@ deps_dir = os.path.join(rive_dir, "dependencies")
 harfbuzz_dir = os.path.join(deps_dir, "harfbuzz")
 sheenbidi_dir = os.path.join(deps_dir, "sheenbidi")
 yoga_dir = os.path.join(deps_dir, "yoga")
-miniaudio_dir = os.path.join(deps_dir, "miniaudio")
 libpng_dir = os.path.join(deps_dir, "libpng")
 zlib_dir = os.path.join(deps_dir, "zlib")
 libjpeg_dir = os.path.join(deps_dir, "libjpeg")
@@ -61,7 +60,6 @@ def install_dependency(name, url, target_dir, retries=4):
 install_dependency("HarfBuzz", "https://github.com/rive-app/harfbuzz/archive/refs/heads/rive_10.1.0.zip", harfbuzz_dir)
 install_dependency("SheenBidi", "https://github.com/Tehreer/SheenBidi/archive/refs/tags/v2.6.zip", sheenbidi_dir)
 install_dependency("Yoga", "https://github.com/rive-app/yoga/archive/refs/heads/rive_changes_v2_0_1_2.zip", yoga_dir)
-install_dependency("Miniaudio", "https://github.com/rive-app/miniaudio/archive/refs/heads/rive_changes_5.zip", miniaudio_dir)
 install_dependency("LibPNG", "https://github.com/glennrp/libpng/archive/refs/heads/libpng16.zip", libpng_dir)
 install_dependency("ZLib", "https://github.com/madler/zlib/archive/refs/tags/v1.3.1.zip", zlib_dir)
 install_dependency("LibJPEG", "https://github.com/rive-app/libjpeg/archive/refs/tags/v9f.zip", libjpeg_dir)
@@ -169,7 +167,6 @@ rive_env.Append(CPPPATH=[
     deps_dir, # For rive_harfbuzz_renames.h
     os.path.join(sheenbidi_dir, "Headers"),
     yoga_dir,
-    miniaudio_dir,
     libpng_dir,
     zlib_dir,
     os.path.join(rive_dir, "include", "libpng"), # For generated pnglibconf.h
@@ -182,7 +179,7 @@ rive_env.Append(CPPPATH=[
 rive_env.Append(CPPDEFINES=[
     '_RIVE_INTERNAL_', 'WITH_RIVE_TEXT', 'WITH_RIVE_TOOLS',
     'WITH_RIVE_LAYOUT', 'YOGA_EXPORT=',
-    'WITH_RIVE_AUDIO', 'MA_NO_RESOURCE_MANAGER',
+    # Audio disabled — Godot handles audio playback natively
     'RIVE_PNG', 'RIVE_JPEG', 'RIVE_WEBP', 'RIVE_DECODERS',
     'HB_ONLY_ONE_SHAPER',
     'HAVE_OT',
@@ -458,20 +455,6 @@ yoga_sources = [
     os.path.join(yoga_dir, "yoga", "log.cpp"),
 ]
 rive_sources.extend(yoga_sources)
-
-# Add Miniaudio sources
-# On iOS, miniaudio.c is compiled as C which chokes on ObjC framework headers
-# included by miniaudio.h (AudioToolbox, Foundation). Rename to .m so it
-# compiles as ObjC without ARC (OBJCFLAGS has -fobjc-arc but .m can handle it).
-if rive_env["platform"] == "ios":
-    miniaudio_m = os.path.join(miniaudio_dir, "miniaudio_ios.m")
-    miniaudio_c = os.path.join(miniaudio_dir, "miniaudio.c")
-    if os.path.exists(miniaudio_c) and not os.path.exists(miniaudio_m):
-        import shutil as _shutil
-        _shutil.copy2(miniaudio_c, miniaudio_m)
-    rive_sources.append(miniaudio_m)
-else:
-    rive_sources.append(os.path.join(miniaudio_dir, "miniaudio.c"))
 
 # Add LibPNG sources
 libpng_sources = [
