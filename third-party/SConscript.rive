@@ -205,8 +205,8 @@ rive_env.Append(CPPDEFINES=[
 if rive_env["platform"] != "windows":
     rive_env.Append(CCFLAGS=['-Wno-unused-function', '-Wno-error=unused-function', '-Wno-macro-redefined'])
 
-# Force include unistd.h for zlib on macOS/Android/Web to fix implicit function declaration errors
-if rive_env["platform"] in ["macos", "android", "web"]:
+# Force include unistd.h for zlib on macOS/iOS/Android/Web to fix implicit function declaration errors
+if rive_env["platform"] in ["macos", "ios", "android", "web"]:
     rive_env.Append(CCFLAGS=['-include', 'unistd.h'])
 
 # Force include rive_harfbuzz_renames.h
