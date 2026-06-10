@@ -4,39 +4,29 @@
 #include "rive/renderer/texture.hpp"
 #include "rive/renderer/rive_render_image.hpp"
 
-#include <godot_cpp/classes/rendering_device.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
+#include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/texture2d.hpp>
-
-#import <Metal/Metal.h>
 
 using namespace godot;
 
 rive::rcp<rive::RenderImage> RiveTextureFactoryMetal_make_image(Ref<Texture2D> texture) {
     if (texture.is_null()) return nullptr;
 
-    RenderingDevice* rd = RenderingServer::get_singleton()->get_rendering_device();
-    if (!rd) return nullptr;
+    RenderingServer* rs = RenderingServer::get_singleton();
 
-    RID texture_rid = RenderingServer::get_singleton()->texture_get_rd_texture(texture->get_rid());
-    if (!texture_rid.is_valid()) return nullptr;
+    // Fallback: encode texture to PNG, then decode via rive factory
+    Ref<Image> img = texture->get_image();
+    if (img.is_valid()) {
+        PackedByteArray png_data = img->save_png_to_buffer();
+        if (!png_data.is_empty()) {
+            rive::Span<const uint8_t> bytes(png_data.ptr(), png_data.size());
+            auto factory = RiveRenderRegistry::get_singleton()->get_factory();
+            if (factory) {
+                return factory->decodeImage(bytes);
+            }
+        }
+    }
 
-    void* texture_ptr = (void*)rd->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_TEXTURE, texture_rid, 0);
-    id<MTLTexture> mtl_texture = (__bridge id<MTLTexture>)texture_ptr;
-    if (!mtl_texture) return nullptr;
-
-    auto factory = RiveRenderRegistry::get_singleton()->get_factory();
-    if (!factory) return nullptr;
-
-    auto ctx = static_cast<rive::gpu::RenderContext*>(factory);
-    if (!ctx) return nullptr;
-
-    auto metal_ctx = ctx->static_impl_cast<rive::gpu::RenderContextMetalImpl>();
-    if (!metal_ctx) return nullptr;
-
-    int width = texture->get_width();
-    int height = texture->get_height();
-    
-    auto rive_texture = metal_ctx->makeImageTexture(width, height, mtl_texture);
-    return rive::make_rcp<rive::RiveRenderImage>(rive_texture);
+    return nullptr;
 }
