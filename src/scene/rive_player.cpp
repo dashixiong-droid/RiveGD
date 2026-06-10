@@ -15,6 +15,29 @@
 #include <rive/assets/audio_asset.hpp>
 #include <rive/audio/audio_source.hpp>
 
+// Detect audio format from file header magic bytes.
+// Works without WITH_RIVE_AUDIO.
+static String detect_audio_format(const rive::SimpleArray<uint8_t>& bytes) {
+    if (bytes.size() < 4) return "wav";
+
+    const uint8_t* b = bytes.data();
+
+    // RIFF....WAVE → WAV
+    if (b[0] == 'R' && b[1] == 'I' && b[2] == 'F' && b[3] == 'F') return "wav";
+
+    // fLaC → FLAC
+    if (b[0] == 'f' && b[1] == 'L' && b[2] == 'a' && b[3] == 'C') return "flac";
+
+    // OggS → OGG (Vorbis)
+    if (b[0] == 'O' && b[1] == 'g' && b[2] == 'g' && b[3] == 'S') return "ogg";
+
+    // ID3 or 0xFF sync → MP3
+    if ((b[0] == 'I' && b[1] == 'D' && b[2] == '3') ||
+        (b[0] == 0xFF && (b[1] & 0xE0) == 0xE0)) return "mp3";
+
+    return "wav"; // default
+}
+
 void RivePlayer::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_rive_view_model_instance"), &RivePlayer::get_rive_view_model_instance);
 
@@ -179,33 +202,25 @@ void RivePlayer::advance(float delta) {
                     auto fileAsset = audioEvent->asset();
                     if (fileAsset && fileAsset->is<rive::AudioAsset>()) {
                         auto* audioAsset = fileAsset->as<rive::AudioAsset>();
-                        auto audioSource = audioAsset->audioSource();
-                        if (audioSource) {
-                            // Get raw audio bytes from AudioSource
-                            auto audioBytes = audioSource->bytes();
-                            if (audioBytes.size() > 0) {
-                                PackedByteArray audio_data;
-                                audio_data.resize(audioBytes.size());
-                                memcpy(audio_data.ptrw(), audioBytes.data(), audioBytes.size());
 
-                                // Determine format string for Godot
-                                String format_str;
-                                switch (audioSource->format()) {
-                                    case rive::AudioFormat::wav:   format_str = "wav"; break;
-                                    case rive::AudioFormat::mp3:   format_str = "mp3"; break;
-                                    case rive::AudioFormat::flac:  format_str = "flac"; break;
-                                    case rive::AudioFormat::vorbis: format_str = "ogg"; break;
-                                    default: format_str = "wav"; break;
-                                }
+                        // Get raw bytes directly from AudioAsset (always available,
+                        // independent of WITH_RIVE_AUDIO).
+                        auto rawBytes = audioAsset->rawBytes();
+                        if (rawBytes.size() > 0) {
+                            PackedByteArray audio_data;
+                            audio_data.resize(rawBytes.size());
+                            memcpy(audio_data.ptrw(), rawBytes.data(), rawBytes.size());
 
-                                // Volume = asset volume * artboard volume
-                                float vol = audioAsset->volume();
-                                if (artboard) {
-                                    vol *= artboard->volume();
-                                }
+                            // Detect format from file header magic bytes
+                            String format_str = detect_audio_format(rawBytes);
 
-                                emit_signal("rive_audio_event", event_name, audio_data, format_str, vol);
+                            // Volume = asset volume * artboard volume
+                            float vol = audioAsset->volume();
+                            if (artboard) {
+                                vol *= artboard->volume();
                             }
+
+                            emit_signal("rive_audio_event", event_name, audio_data, format_str, vol);
                         }
                     }
                 }
