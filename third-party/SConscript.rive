@@ -457,10 +457,7 @@ yoga_sources = [
 rive_sources.extend(yoga_sources)
 
 # Add Miniaudio sources
-if rive_env["platform"] == "ios":
-    rive_sources.append(os.path.join(miniaudio_dir, "miniaudio.m"))
-else:
-    rive_sources.append(os.path.join(miniaudio_dir, "miniaudio.c"))
+rive_sources.append(os.path.join(miniaudio_dir, "miniaudio.c"))
 
 # Add LibPNG sources
 libpng_sources = [
