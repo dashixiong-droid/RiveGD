@@ -58,6 +58,13 @@ jobs:
           submodules: recursive
           fetch-depth: 1
 
+      - name: Pin godot-cpp to 4.5-stable
+        shell: bash
+        run: |
+          cd third-party/godot-cpp
+          git fetch --depth=1 origin tag godot-4.5-stable
+          git checkout godot-4.5-stable
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
