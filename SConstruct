@@ -104,6 +104,17 @@ if extension_env["platform"] == "macos":
         "-framework", "AudioToolbox"
     ])
 
+if extension_env["platform"] == "ios":
+    extension_env.Append(LINKFLAGS=[
+        "-framework", "Metal",
+        "-framework", "Foundation",
+        "-framework", "QuartzCore",
+        "-framework", "UIKit",
+        "-framework", "CoreGraphics",
+        "-framework", "CoreText",
+        "-framework", "AudioToolbox"
+    ])
+
 # Link against Rive Runtime
 extension_env.Append(LIBS=[rive_lib])
 
