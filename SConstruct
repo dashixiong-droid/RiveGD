@@ -112,6 +112,7 @@ if extension_env["platform"] == "ios":
         "-framework", "UIKit",
         "-framework", "CoreGraphics",
         "-framework", "CoreText",
+        "-framework", "ImageIO",
         "-framework", "AudioToolbox"
     ])
 

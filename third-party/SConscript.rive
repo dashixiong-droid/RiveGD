@@ -231,7 +231,7 @@ elif rive_env["platform"] == "ios":
     # Only ObjC/ObjC++ files need ARC — putting it in CCFLAGS pollutes C/C++ compilation
     rive_env.Append(OBJCFLAGS=["-fobjc-arc"])
     rive_env.Append(OBJCXXFLAGS=["-fobjc-arc"])
-    rive_env.Append(FRAMEWORKS=["Metal", "Foundation", "QuartzCore", "UIKit", "CoreGraphics", "CoreText", "AudioToolbox"])
+    rive_env.Append(FRAMEWORKS=["Metal", "Foundation", "QuartzCore", "UIKit", "CoreGraphics", "CoreText", "ImageIO", "AudioToolbox"])
     rive_env.Append(CPPDEFINES=["RIVE_METAL", "RIVE_IOS"])
 elif rive_env["platform"] == "linuxbsd":
     rive_env.Append(CPPDEFINES=["RIVE_DESKTOP_GL", "RIVE_VULKAN", "RIVE_UPSTREAM_VULKAN_IMPL", "VULKAN_ENABLED"])
