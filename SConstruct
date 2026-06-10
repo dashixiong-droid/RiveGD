@@ -56,7 +56,7 @@ sources += Glob("src/patches/*.cpp")
 sources += Glob("src/resources/*.cpp")
 sources += Glob("src/scene/*.cpp")
 sources += Glob("src/editor/*.cpp")
-if extension_env["platform"] == "macos":
+if extension_env["platform"] in ["macos", "ios"]:
     sources += Glob("src/*.mm")
     sources += Glob("src/renderer/*.mm")
 
