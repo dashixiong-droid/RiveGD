@@ -1,12 +1,12 @@
 # RiveGD
 
-[![Release Builds](https://github.com/maidopi-usagi/RiveGD/actions/workflows/release.yml/badge.svg)](https://github.com/maidopi-usagi/RiveGD/actions/workflows/release.yml)
+[![Release Builds](https://github.com/dashixiong-droid/RiveGD/actions/workflows/release.yml/badge.svg)](https://github.com/dashixiong-droid/RiveGD/actions/workflows/release.yml)
 
 An **unofficial** Rive runtime with hardware accelerated GPU Renderer for Godot 4 as a GDExtension. Implemented Rive Renderer as rendering backend instead of CPU approaches with Skia. Artboards are directly rendered into a Texture.
 
 WIP!! PRs are welcomed.
 
-> Prebuilt binaries (macOS-universal, Windows-x86_64, Linux-x86_64; debug + release) are attached to every [GitHub Release](https://github.com/maidopi-usagi/RiveGD/releases).
+> Prebuilt binaries for 6 platforms (macOS, Windows, Linux, Android, iOS, Web; debug + release) are attached to every [GitHub Release](https://github.com/dashixiong-droid/RiveGD/releases).
 
 
 https://github.com/user-attachments/assets/615cefe9-f9ba-4821-b8d4-bf70510b7d0c
@@ -501,22 +501,20 @@ Obtained via `get_view_model_instance()` on any Rive node. Provides typed access
 
 ## Limitations
 
-- **Not tested on:** Android / iOS. Linux and Windows builds are produced by CI but only lightly smoke-tested.
-- **OpenGL backend:** Godot uses OpenGL3 while Rive needs 4+. Applied a small patch upon official repo to support OpenGL3
-   - MacOS doesn't support native GLES fallback so cannot work on MacOS right now. I'll looking into this when I have time, maybe fallback to ANGLE when ANGLE backend got fixed.
-   - ANGLE Backend: Godot official builds links ANGLE statically. I can only make it work using dynamic-linked libEGL and libGLESv2.
-- **MoltenVK:** Seems that MoltenVK is missing some features, rendered texture is blotchy. Please use Metal on MacOS.
+- **iOS audio**: Audio playback is disabled on iOS (no OpenAL backend). The `rive_audio_event` signal still fires — bridge to AVAudioEngine or similar in GDScript if needed.
+- **FLAC**: Godot does not natively support FLAC decoding. Requires external conversion.
+- **OpenGL**: Godot uses OpenGL3 while Rive needs 4+. A small patch bridges this, but OpenGL remains the least-tested backend. Web (WebGL2) and Android GLES are partially functional. Prefer Vulkan/Metal/D3D12 on desktop.
 
 ## Todo
 
-- [ ] **Platform Support**: Test and fix builds for Linux, Android, and iOS.
-- [ ] **Rendering**: Add more vector drawing commands.
-- [ ] **Integration**: Implement `RiveRenderTargetTexture` for rendering Rive content to a Godot Texture resource.
-- [ ] **Events**: Add support for Rive Events (Note: Rive recommends using DataBinding/ViewModels for most interactions).
-- [ ] **Documentation**: Add docs when APIs becomes stable, and add several demos.
+- [x] **Platform Support**: Test and fix builds for Linux, Android, iOS, and Web. (6-platform CI matrix passing)
+- [x] **Audio**: Audio events bridge to GDScript via `rive_audio_event` signal. (Delegated to Godot AudioStreamPlayer)
+- [x] **Integration**: Implement `RiveTextureTarget` for rendering Rive content to a Godot Texture resource.
+- [x] **Events**: Add support for Rive Events + AudioEvents.
+- [x] **Documentation**: Add complete API Reference to README.
 - [ ] **Scripting**: Enable Luau scripting support within Rive.
-- [ ] **Text**: Add support for using Godot fonts in Rive.
-- [ ] **Audio**: Add audio support (TBD).
+- [ ] **Text**: Add support for using Godot fonts (Font/FontFile resources) in Rive.
+- [ ] **Rendering**: Add more vector drawing commands (e.g. blur, drop-shadow, advanced fills).
 
 ## Building from Source
 
@@ -544,7 +542,7 @@ Obtained via `get_view_model_instance()` on any Rive node. Provides typed access
 
 1. **Clone the repository** (including submodules):
    ```bash
-   git clone --recursive https://github.com/maidopi-usagi/RiveGD.git
+   git clone --recursive https://github.com/dashixiong-droid/RiveGD.git
    cd godot-rive
    ```
 
